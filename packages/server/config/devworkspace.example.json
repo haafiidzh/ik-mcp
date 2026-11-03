@@ -1,0 +1,101 @@
+{
+  "server": {
+    "name": "devworkspace-mcp",
+    "logLevel": "info",
+    "auditLogPath": "./audit/audit.jsonl"
+  },
+  "permissions": {
+    "defaultMode": "read-only",
+    "allowWrites": false,
+    "writeOperations": []
+  },
+  "workspaces": [
+    {
+      "id": "sample-project",
+      "name": "Sample Project",
+      "rootPath": "../test/fixtures/sample-workspace",
+      "databases": []
+    }
+  ],
+  "filesystem": {
+    "enabled": true,
+    "allowedRoots": [
+      "../test/fixtures/sample-workspace"
+    ],
+    "blockedNames": [
+      ".env",
+      "id_rsa",
+      "id_ed25519"
+    ],
+    "unblock": [],
+    "ignoreDirs": [
+      "node_modules",
+      ".git",
+      "dist",
+      "vendor"
+    ],
+    "allowedExtensions": null,
+    "maxFileBytes": 200000
+  },
+  "databases": [
+    {
+      "name": "local-sqlite",
+      "type": "sqlite",
+      "enabled": false,
+      "databasePath": "./data/sample.db",
+      "readOnly": true
+    },
+    {
+      "name": "local-pg",
+      "type": "postgres",
+      "enabled": false,
+      "connectionStringEnv": "DEVWS_PG_URL",
+      "readOnly": true,
+      "schemas": [
+        "public"
+      ]
+    }
+  ],
+  "github": {
+    "enabled": false,
+    "tokenEnv": "GITHUB_TOKEN",
+    "apiBaseUrl": "https://api.github.com",
+    "allowedRepositories": [
+      "example-org/example-repo"
+    ],
+    "allowedOwners": []
+  },
+  "customApis": [
+    {
+      "name": "sample-api",
+      "enabled": false,
+      "baseUrl": "http://127.0.0.1:3001",
+      "allowPrivateNetwork": true,
+      "auth": {
+        "type": "bearer",
+        "tokenEnv": "SAMPLE_API_TOKEN"
+      },
+      "allowedMethods": [
+        "GET"
+      ],
+      "timeoutMs": 15000,
+      "maxResponseBytes": 200000,
+      "sensitiveFields": [
+        "password",
+        "token"
+      ],
+      "endpoints": [
+        {
+          "name": "get-health",
+          "method": "GET",
+          "path": "/health",
+          "description": "Get API health status",
+          "permission": "read",
+          "pathParams": {},
+          "query": {},
+          "body": null
+        }
+      ]
+    }
+  ]
+}
