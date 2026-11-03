@@ -68,7 +68,9 @@ const filesystemSchema = z.strictObject({
   unblock: z.array(nonEmpty).default([]),
   ignoreDirs: z.array(nonEmpty).default([...DEFAULT_IGNORE_DIRS]),
   allowedExtensions: z.array(nonEmpty).nullable().default(null),
-  maxFileBytes: posInt.default(DEFAULT_LIMITS.maxFileBytes),
+  maxFileBytes: posInt
+    .max(DEFAULT_LIMITS.maxFileBytes, "must not exceed the default of 200000 (overrides may only tighten)")
+    .default(DEFAULT_LIMITS.maxFileBytes),
 });
 
 const readOnlyTrue = z.literal(true, { error: "must be true: database writes are out of scope in the MVP" });

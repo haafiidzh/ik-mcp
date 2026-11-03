@@ -239,3 +239,21 @@ describe("limits overrides (P0-08)", () => {
     expect(issuesOf(withLimits({ bogus: 1 }))).toContain("limits");
   });
 });
+
+describe("filesystem.maxFileBytes only tightens (P1-09)", () => {
+  const withFs = (maxFileBytes: unknown): Record<string, unknown> => {
+    const e = example();
+    return { ...e, filesystem: { ...(e["filesystem"] as Record<string, unknown>), maxFileBytes } };
+  };
+
+  it("rejects a value above the default with a JSON-path error", () => {
+    const msg = issuesOf(withFs(DEFAULT_LIMITS.maxFileBytes + 1));
+    expect(msg).toContain("$.filesystem.maxFileBytes");
+    expect(msg).toMatch(/only tighten/);
+  });
+
+  it("accepts the default and lower values", () => {
+    expect(parseConfigText(JSON.stringify(withFs(DEFAULT_LIMITS.maxFileBytes))).filesystem.maxFileBytes).toBe(200000);
+    expect(parseConfigText(JSON.stringify(withFs(1000))).filesystem.maxFileBytes).toBe(1000);
+  });
+});
