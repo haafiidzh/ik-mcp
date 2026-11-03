@@ -8,6 +8,7 @@
     "build": "pnpm --filter devworkspace-mcp build",
     "dev": "pnpm --filter devworkspace-mcp dev",
     "test": "pnpm --filter devworkspace-mcp test",
+    "test:postgres": "pnpm --filter devworkspace-mcp test:postgres",
     "lint": "pnpm --filter devworkspace-mcp lint",
     "typecheck": "pnpm --filter devworkspace-mcp typecheck",
     "format": "pnpm --filter devworkspace-mcp format"

@@ -15,16 +15,22 @@
     "build": "tsc -p tsconfig.json",
     "dev": "tsx watch src/index.ts",
     "test": "vitest run --passWithNoTests",
+    "test:postgres": "bash scripts/test-postgres.sh",
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "format": "prettier --write ."
   },
   "dependencies": {
     "@modelcontextprotocol/server": "^2.4.0",
+    "better-sqlite3": "^13.0.3",
+    "node-sql-parser": "^5.4.0",
+    "pg": "^8.23.1",
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0",
     "@types/node": "^22.20.5",
+    "@types/pg": "^8.23.1",
     "eslint": "^10.14.0",
     "prettier": "^3.9.10",
     "tsx": "^4.23.15",
