@@ -4,7 +4,10 @@ import type { AuditLog } from "../core/audit.js";
 import type { Limits } from "../core/limits.js";
 import type { Logger } from "../core/logger.js";
 import type { Redactor } from "../core/redact.js";
+import { AppError } from "../core/errors.js";
 import { fail, ok, toMcpResult, type McpToolResult, type ToolResult } from "../core/response.js";
+import { createDatabaseRegistry, type AdapterFactories } from "../integrations/database/database.registry.js";
+import { registerDatabaseTools } from "../tools/database/index.js";
 import { registerFilesystemTools } from "../tools/filesystem/index.js";
 import { buildStatus, resolvePackState } from "./status.js";
 
@@ -15,6 +18,32 @@ export interface ServerDeps {
   audit: AuditLog;
   redactor: Redactor;
   startedAtMs: number;
+  /** Test seam: replaces the real adapter factories (for example a fake PostgreSQL pool). */
+  databaseFactories?: AdapterFactories<DatabaseConnection>;
+}
+
+export type DatabaseConnection = Config["databases"][number];
+
+/**
+ * Drivers (better-sqlite3 native module, pg) are loaded on first use, not at server start:
+ * a server without database connections never pays for them, and startup stays fast.
+ */
+function defaultDatabaseFactories(deps: ServerDeps): AdapterFactories<DatabaseConnection> {
+  return {
+    sqlite: async (c) => {
+      const { createSqliteAdapterFactory } = await import("../integrations/database/sqlite.adapter.js");
+      return createSqliteAdapterFactory<DatabaseConnection>({ maxCellChars: deps.limits.maxCellChars })(c);
+    },
+    postgres: async (c) => {
+      if (c.type !== "postgres") throw new AppError("INTEGRATION_UNAVAILABLE", "Database connection could not be opened.");
+      const { createPostgresAdapter } = await import("../integrations/database/postgres.adapter.js");
+      return createPostgresAdapter(c, {
+        maxCellChars: deps.limits.maxCellChars,
+        defaultTimeoutMs: deps.limits.dbQueryTimeoutMs,
+        logger: deps.logger,
+      });
+    },
+  };
 }
 
 /** Run a handler: time it, audit metadata only, map to MCP. Never throws. */
@@ -72,7 +101,17 @@ export function registerTools(server: McpServer, deps: ServerDeps): string[] {
 
   const packs = resolvePackState(deps.config);
   if (packs.database) {
-    // P2: registerDatabaseTools(server, deps)
+    const registry = createDatabaseRegistry<DatabaseConnection>(
+      deps.config.databases,
+      deps.databaseFactories ?? defaultDatabaseFactories(deps),
+    );
+    registered.push(...registerDatabaseTools(server, deps, registry, runTool));
+    // Release connections when the transport closes (best effort; never throws).
+    const previous = server.server.onclose;
+    server.server.onclose = () => {
+      previous?.();
+      registry.closeAll().catch(() => undefined);
+    };
   }
   if (packs.filesystem) {
     registered.push(...registerFilesystemTools(server, deps, runTool));

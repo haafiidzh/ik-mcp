@@ -162,7 +162,7 @@ export function fitToBudget<T>(result: ToolResult<T>, maxBytes: number): ToolRes
       return mark(next, n);
     };
   } else {
-    // Unknown shape (cannot be cut): refuse with a small error rather than exceed the budget (ADR-025).
+    // Unknown shape (cannot be cut): refuse with a small error rather than exceed the budget (ADR-044).
     return fail(new AppError("LIMIT_EXCEEDED", "Result is larger than the configured maximum response size and cannot be truncated."));
   }
 
