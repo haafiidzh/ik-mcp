@@ -1,4 +1,4 @@
-import { toErrorPayload, type ErrorPayload } from "./errors.js";
+import { AppError, toErrorPayload, type ErrorPayload } from "./errors.js";
 import { DEFAULT_LIMITS } from "./limits.js";
 import type { Redactor } from "./redact.js";
 
@@ -120,8 +120,8 @@ function isObj(v: unknown): v is Record<string, unknown> {
 /**
  * Enforce `maxBytes` against the TOTAL serialized size sent to the host (both copies, doc 04 section 2).
  * The payload (array entries, text `content`, tree nodes) is cut first and the result is marked
- * `truncated`/`partial` with a warning, so the sum stays within budget. Errors and payloads of an
- * unknown shape are returned unchanged. The doc 04 shape (text item equals the JSON of structuredContent)
+ * `truncated`/`partial` with a warning, so the sum stays within budget. Errors are returned unchanged; a payload
+ * of an unknown shape that is over budget becomes a small LIMIT_EXCEEDED error. The doc 04 shape (text item equals the JSON of structuredContent)
  * is kept, which means each copy gets at most about half of the budget.
  */
 export function fitToBudget<T>(result: ToolResult<T>, maxBytes: number): ToolResult<T> {
@@ -162,7 +162,8 @@ export function fitToBudget<T>(result: ToolResult<T>, maxBytes: number): ToolRes
       return mark(next, n);
     };
   } else {
-    return result;
+    // Unknown shape (cannot be cut): refuse with a small error rather than exceed the budget (ADR-025).
+    return fail(new AppError("LIMIT_EXCEEDED", "Result is larger than the configured maximum response size and cannot be truncated."));
   }
 
   let lo = 0;

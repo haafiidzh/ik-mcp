@@ -42,7 +42,7 @@ export async function runTool(
     durationMs: Date.now() - t0,
     write: false,
   });
-  return toMcpResult(result, deps.redactor);
+  return toMcpResult(result, deps.redactor, deps.limits.maxResponseBytes);
 }
 
 /**
