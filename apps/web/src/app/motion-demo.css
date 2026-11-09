@@ -1,0 +1,148 @@
+/*
+ * /demo player motion (web-motion-spec 7, M-11). opacity/transform only, one-shot, no loops.
+ * Default state: every step visible. Only after the user presses Play/Step does the client set data-shown on the
+ * list; later steps are then hidden (visibility:hidden, which also removes them from the accessibility tree and keeps
+ * their space so nothing shifts) and the newest step plays its enter animation once. Rules cover MAX_STEPS (12) steps, see demo-player.tsx.
+ */
+.demo-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 3.5rem; /* reserved: controls mount after hydration */
+  margin-bottom: 1rem;
+}
+.demo-btn {
+  min-height: 2.75rem; /* 44px touch target */
+  padding-inline: 0.875rem;
+}
+.demo-status {
+  flex: 1 1 14rem;
+  min-width: 0;
+  min-height: 2.5rem; /* two lines reserved: the text changes per step */
+  align-content: center;
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--muted-foreground);
+}
+@media (max-width: 639px) {
+  /* Two even columns: no ragged wrapping, stable height. */
+  .demo-controls {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    min-height: 15rem; /* 3 button rows + status, reserved before hydration */
+  }
+  .demo-btn { width: 100%; padding-inline: 0.5rem; }
+  .demo-status { grid-column: 1 / -1; flex: none; }
+}
+@media (min-width: 640px) and (max-width: 1023px) {
+  .demo-controls { min-height: 5.75rem; } /* buttons + status wrap to two rows */
+}
+@media (min-width: 1024px) {
+  .demo-controls {
+    position: sticky;
+    top: 4rem;
+    z-index: 10;
+    background: var(--background);
+    padding-block: 0.5rem;
+  }
+}
+
+.demo-steps > li {
+  scroll-margin-top: 8rem;
+}
+.demo-steps > li[data-outcome="rejected"] {
+  border-color: color-mix(in oklab, var(--danger) 45%, transparent);
+}
+
+/* Long JSON/code lines wrap inside the card instead of scrolling or widening the page. */
+.demo-steps,
+.demo-steps > li,
+.demo-steps details,
+.demo-steps figure,
+.demo-steps figure > div {
+  min-width: 0;
+  max-width: 100%;
+}
+.demo-steps > li {
+  overflow-wrap: anywhere;
+}
+.demo-steps li pre,
+.demo-steps li pre code {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  overflow-x: visible;
+}
+.demo-steps li pre {
+  max-width: 100%;
+}
+
+/* Hide steps after the revealed count. They keep their space (visibility, not display), so the list height is
+   final from the first press and nothing below it or in the viewport moves while steps appear. */
+.demo-steps[data-shown="1"] > li:nth-child(n + 2),
+.demo-steps[data-shown="2"] > li:nth-child(n + 3),
+.demo-steps[data-shown="3"] > li:nth-child(n + 4),
+.demo-steps[data-shown="4"] > li:nth-child(n + 5),
+.demo-steps[data-shown="5"] > li:nth-child(n + 6),
+.demo-steps[data-shown="6"] > li:nth-child(n + 7),
+.demo-steps[data-shown="7"] > li:nth-child(n + 8),
+.demo-steps[data-shown="8"] > li:nth-child(n + 9),
+.demo-steps[data-shown="9"] > li:nth-child(n + 10),
+.demo-steps[data-shown="10"] > li:nth-child(n + 11),
+.demo-steps[data-shown="11"] > li:nth-child(n + 12) {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes demo-in-left {
+    from { opacity: 0; transform: translateX(-12px); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes demo-fade {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes demo-badge {
+    from { opacity: 0; transform: scale(0.85); }
+    to { opacity: 1; transform: none; }
+  }
+
+  /* The newest step (the last visible one) animates in once. */
+  .demo-steps[data-shown="1"] > li:nth-child(1),
+  .demo-steps[data-shown="2"] > li:nth-child(2),
+  .demo-steps[data-shown="3"] > li:nth-child(3),
+  .demo-steps[data-shown="4"] > li:nth-child(4),
+  .demo-steps[data-shown="5"] > li:nth-child(5),
+  .demo-steps[data-shown="6"] > li:nth-child(6),
+  .demo-steps[data-shown="7"] > li:nth-child(7),
+  .demo-steps[data-shown="8"] > li:nth-child(8),
+  .demo-steps[data-shown="9"] > li:nth-child(9),
+  .demo-steps[data-shown="10"] > li:nth-child(10),
+  .demo-steps[data-shown="11"] > li:nth-child(11),
+  .demo-steps[data-shown="12"] > li:nth-child(12) {
+    animation: demo-fade var(--dur-base) var(--ease-out) both;
+  }
+  .demo-steps[data-shown="1"] > li[data-kind="user"]:nth-child(1),
+  .demo-steps[data-shown="2"] > li[data-kind="user"]:nth-child(2),
+  .demo-steps[data-shown="3"] > li[data-kind="user"]:nth-child(3),
+  .demo-steps[data-shown="4"] > li[data-kind="user"]:nth-child(4),
+  .demo-steps[data-shown="5"] > li[data-kind="user"]:nth-child(5),
+  .demo-steps[data-shown="6"] > li[data-kind="user"]:nth-child(6) {
+    animation-name: demo-in-left;
+  }
+
+  /* Tool card: arguments first, result 250 ms later; refusal badge and note fade in after the header. */
+  .demo-steps[data-shown] > li[data-kind="tool"] .demo-args,
+  .demo-steps[data-shown] > li[data-kind="tool"] .demo-result,
+  .demo-steps[data-shown] > li[data-kind="tool"] .demo-note {
+    animation: demo-fade var(--dur-base) var(--ease-out) both;
+  }
+  .demo-steps[data-shown] > li[data-kind="tool"] .demo-args { animation-delay: var(--dur-fast); }
+  .demo-steps[data-shown] > li[data-kind="tool"] .demo-result { animation-delay: calc(var(--dur-fast) + 250ms); }
+  .demo-steps[data-shown] > li[data-outcome="rejected"] .demo-note { animation-delay: var(--dur-fast); }
+  .demo-steps[data-shown] > li[data-outcome="rejected"] summary > span:last-child {
+    animation: demo-badge var(--dur-base) var(--ease-out) both;
+  }
+}

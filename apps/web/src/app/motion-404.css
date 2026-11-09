@@ -1,0 +1,45 @@
+/*
+ * 404 eye (web-motion-spec section 8, M-12). One-shot, no loop. Base state = final state (open, centred).
+ * Keyframes only inside no-preference. transform/opacity only. Total ~1.3 s.
+ */
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes nf-eye-open {
+    from {
+      transform: scaleY(0.1);
+    }
+    to {
+      transform: scaleY(1);
+    }
+  }
+  @keyframes nf-eye-look {
+    0%,
+    100% {
+      transform: translateX(0);
+    }
+    33% {
+      transform: translateX(-3px);
+    }
+    66% {
+      transform: translateX(3px);
+    }
+  }
+  @keyframes nf-reveal {
+    from {
+      opacity: 0;
+      transform: translateY(var(--shift-sm));
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  .nf-eye .ik-eye-lid {
+    animation: nf-eye-open var(--dur-slow) var(--ease-out) backwards;
+  }
+  .nf-eye .ik-eye-pupil {
+    animation: nf-eye-look 750ms var(--ease-inout) var(--dur-slow) backwards;
+  }
+  .nf-reveal {
+    animation: nf-reveal var(--dur-base) var(--ease-out) 1.4s backwards;
+  }
+}
