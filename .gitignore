@@ -16,3 +16,9 @@ audit/
 !**/fixtures/**/*.sqlite3
 !**/fixtures/**/*.db
 .DS_Store
+
+# apps/web build outputs
+.next/
+out/
+next-env.d.ts
+*.tsbuildinfo
