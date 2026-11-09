@@ -92,6 +92,13 @@
   html {
     scroll-padding-top: 5rem;
   }
+  /* Smooth in-page anchor scrolling (#section links) for everyone who has not asked for reduced motion.
+     The reduced-motion blocks below force `scroll-behavior: auto`. */
+  @media (prefers-reduced-motion: no-preference) {
+    html {
+      scroll-behavior: smooth;
+    }
+  }
   body {
     @apply bg-background text-foreground font-sans antialiased;
     line-height: 1.6;
@@ -105,12 +112,74 @@
   }
 }
 
+/*
+ * Motion tokens (web-motion-spec section 1, M-01). Theme-independent; they live on :root.
+ * Durations: instant 100 / fast 150 / base 240 / slow 400 / scene 600 ms (scene is the maximum).
+ * Easings: out = default enter, standard = state change, in = exit (<= 150 ms), inout = sweeps, linear = scroll-linked.
+ * Shifts: enter translate distance (sm on mobile). Stagger: per-item delay, total capped at 400 ms by components.
+ * Rules: animate only transform, opacity, clip-path (SVG: stroke-dashoffset). Keyframes are applied only inside
+ * @media (prefers-reduced-motion: no-preference); the base state is always the final, visible state.
+ * Values are starting points; the human tunes them after seeing them (spec Q-H3).
+ */
+:root {
+  --dur-instant: 100ms;
+  --dur-fast: 150ms;
+  --dur-base: 240ms;
+  --dur-slow: 400ms;
+  --dur-scene: 600ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --ease-inout: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-linear: linear;
+  --shift-md: 12px;
+  --shift-sm: 8px;
+  --stagger: 40ms;
+}
+
+@media (max-width: 639px) {
+  :root {
+    --shift-md: var(--shift-sm);
+    --stagger: 30ms;
+  }
+}
+
+/* Reduced-motion model: tokens collapse to "no motion" so token-driven CSS lands on the final state at once. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-instant: 0.01ms;
+    --dur-fast: 0.01ms;
+    --dur-base: 0.01ms;
+    --dur-slow: 0.01ms;
+    --dur-scene: 0.01ms;
+    --shift-md: 0px;
+    --shift-sm: 0px;
+    --stagger: 0ms;
+  }
+}
+
+/* Safety net only; new animated CSS is wrapped in (prefers-reduced-motion: no-preference) and does not rely on this. */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+}
+
+/* Print: show the final state of everything; no animation, transition or transform left over. */
+@media print {
+  *, *::before, *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+  [data-motion-armed], [data-reveal] {
+    opacity: 1 !important;
+    transform: none !important;
+    clip-path: none !important;
+    visibility: visible !important;
   }
 }
 

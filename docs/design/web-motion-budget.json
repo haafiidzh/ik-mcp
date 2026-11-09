@@ -1,0 +1,97 @@
+{
+  "description": "First-load JS budget for the static export (apps/web/out), gzip bytes, same metric as the pre-motion numbers (every script/preload the HTML lists, including the noModule polyfill chunk; jsGzipBytesModern leaves that one out). Enforced as an absolute cap per route (capBytes). specTargetBytes = pre-motion size + the allowed delta of web-motion-spec section 10. Regenerate with: node apps/web/scripts/check-motion.mjs --write-baseline (after pnpm web:build).",
+  "schema": 2,
+  "measuredFrom": "local apps/web/out (Q-P4 default)",
+  "specTargetDeltaBytes": {
+    "default": 20480,
+    "tabRoutes": 35840
+  },
+  "tabRoutes": [
+    "demo",
+    "install",
+    "security"
+  ],
+  "preMotionJsGzipBytes": {
+    "index": 193941,
+    "install": 201832,
+    "security": 200682,
+    "tools": 194241,
+    "demo": 201832
+  },
+  "routes": {
+    "404": {
+      "jsFiles": 10,
+      "jsGzipBytes": 208297,
+      "jsGzipBytesModern": 168670,
+      "cssGzipBytes": 11750,
+      "preMotionJsGzipBytes": null,
+      "specTargetBytes": null,
+      "capBytes": 209408
+    },
+    "_not-found": {
+      "jsFiles": 10,
+      "jsGzipBytes": 208297,
+      "jsGzipBytesModern": 168670,
+      "cssGzipBytes": 11750,
+      "preMotionJsGzipBytes": null,
+      "specTargetBytes": null,
+      "capBytes": 209408
+    },
+    "demo": {
+      "jsFiles": 13,
+      "jsGzipBytes": 224286,
+      "jsGzipBytesModern": 184659,
+      "cssGzipBytes": 13720,
+      "preMotionJsGzipBytes": 201832,
+      "specTargetBytes": 237672,
+      "capBytes": 225792
+    },
+    "index": {
+      "jsFiles": 12,
+      "jsGzipBytes": 220753,
+      "jsGzipBytesModern": 181126,
+      "cssGzipBytes": 13791,
+      "preMotionJsGzipBytes": 193941,
+      "specTargetBytes": 214421,
+      "capBytes": 222208
+    },
+    "install": {
+      "jsFiles": 13,
+      "jsGzipBytes": 223591,
+      "jsGzipBytesModern": 183964,
+      "cssGzipBytes": 13434,
+      "preMotionJsGzipBytes": 201832,
+      "specTargetBytes": 237672,
+      "capBytes": 224768
+    },
+    "security": {
+      "jsFiles": 13,
+      "jsGzipBytes": 228251,
+      "jsGzipBytesModern": 188624,
+      "cssGzipBytes": 13669,
+      "preMotionJsGzipBytes": 200682,
+      "specTargetBytes": 236522,
+      "capBytes": 229376
+    },
+    "tools": {
+      "jsFiles": 11,
+      "jsGzipBytes": 215444,
+      "jsGzipBytesModern": 175817,
+      "cssGzipBytes": 12140,
+      "preMotionJsGzipBytes": 194241,
+      "specTargetBytes": 214721,
+      "capBytes": 216576
+    }
+  },
+  "lazyJsChunks": {
+    "files": 5,
+    "gzipBytes": 41705,
+    "largestGzipBytes": [
+      20698,
+      14916,
+      3514
+    ],
+    "capGzipBytes": 44032
+  },
+  "chunksGzipBytesTotal": 313685
+}
