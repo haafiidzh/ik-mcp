@@ -1,0 +1,176 @@
+/*
+ * Tab motion for /security and /install (web-motion-spec 6, M-07). opacity/transform only.
+ * Panels are force-mounted by Radix (so their text is in the server HTML) and stacked in one grid cell: the cell is as
+ * tall as the tallest panel, so switching tabs never changes layout. Inactive panels are visibility:hidden, which keeps
+ * them out of the accessibility tree and the tab order.
+ */
+.animated-tabs-pill {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: inherit;
+  border: 1px solid transparent;
+  background: var(--background);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.08);
+  pointer-events: none;
+}
+.dark .animated-tabs-pill {
+  border-color: var(--input);
+  background: color-mix(in oklab, var(--input) 30%, transparent);
+  box-shadow: none;
+}
+
+.animated-tabs-stack {
+  display: grid;
+}
+.animated-tabs-panel {
+  grid-area: 1 / 1;
+  min-width: 0;
+}
+.animated-tabs-panel[data-state="inactive"] {
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+.animated-tabs-panel[data-state="active"] {
+  visibility: visible;
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .animated-tabs-panel {
+    transition:
+      opacity var(--dur-base) var(--ease-out),
+      transform var(--dur-base) var(--ease-out),
+      visibility 0s linear 0s;
+  }
+  .animated-tabs-panel[data-state="inactive"] {
+    transform: translateY(8px);
+    /* exit fades first, then the panel leaves the accessibility tree */
+    transition:
+      opacity var(--dur-base) var(--ease-out),
+      transform var(--dur-base) var(--ease-out),
+      visibility 0s linear var(--dur-base);
+  }
+  .animated-tabs-panel[data-state="active"] {
+    transform: translateY(0);
+  }
+}
+
+/*
+ * Split layout (verticalFromMd): list on the left from 48rem up, wrapped row above the panel below it. Uses the CSS
+ * breakpoint, not the Radix orientation, so the first paint is correct before hydration.
+ */
+.animated-tabs-split {
+  flex-direction: column;
+  gap: 1rem;
+}
+.animated-tabs-split > .animated-tabs-list {
+  width: 100%;
+  justify-content: flex-start;
+  gap: 2px;
+}
+.animated-tabs-split > .animated-tabs-list > [role="tab"] {
+  flex: 0 1 auto;
+}
+.animated-tabs-split > .animated-tabs-stack {
+  min-width: 0;
+}
+@media (min-width: 48rem) {
+  .animated-tabs-split {
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 1.25rem;
+  }
+  .animated-tabs-split > .animated-tabs-list {
+    width: 11rem;
+    flex: none;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-items: stretch;
+  }
+  .animated-tabs-split > .animated-tabs-list > [role="tab"] {
+    flex: none;
+    width: 100%;
+    justify-content: flex-start;
+  }
+  .animated-tabs-split > .animated-tabs-stack {
+    flex: 1 1 0;
+  }
+}
+
+/*
+ * Segmented variant (/demo): a full-width control split evenly, sliding pill behind the active tab. Icon tile + label +
+ * meta line per tab. Only the pill moves (transform, from layoutId); colour changes are state, not animation.
+ * Triggers are >= 48px tall. Below 40rem each tab stacks its content centred so two tabs fit at 320px.
+ */
+.animated-tabs-seg {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.25rem;
+  width: 100%;
+  padding: 0.3125rem;
+  border-radius: 1rem;
+  border: 1px solid var(--border);
+  background: var(--muted);
+}
+.animated-tabs-seg-trigger {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  min-height: 3.75rem;
+  min-width: 0;
+  padding: 0.5rem 0.5rem;
+  border-radius: 0.75rem;
+  white-space: normal;
+  text-align: center;
+  line-height: 1.2;
+  color: var(--muted-foreground);
+}
+.animated-tabs-seg-trigger:hover { color: var(--foreground); }
+.animated-tabs-seg-trigger[data-state="active"] { color: var(--foreground); }
+.animated-tabs-seg-trigger:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
+}
+.animated-tabs-seg .animated-tabs-pill {
+  border-color: var(--border);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.1), 0 1px 2px rgb(0 0 0 / 0.06);
+}
+.dark .animated-tabs-seg .animated-tabs-pill {
+  border-color: var(--input);
+  background: color-mix(in oklab, var(--input) 45%, var(--muted));
+}
+.animated-tabs-seg-trigger > .tab-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.375rem;
+  min-width: 0;
+}
+.tab-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  flex: none;
+  border-radius: 0.5rem;
+  background: color-mix(in oklab, var(--foreground) 7%, transparent);
+}
+.animated-tabs-seg-trigger[data-state="active"] .tab-icon {
+  color: var(--primary-foreground, #fff);
+  background: var(--primary);
+}
+.tab-text { display: flex; flex-direction: column; align-items: center; gap: 0.125rem; min-width: 0; }
+.tab-label { font-size: 0.875rem; font-weight: 600; overflow-wrap: anywhere; }
+.tab-meta { font-size: 0.75rem; font-weight: 400; color: var(--muted-foreground); }
+@media (min-width: 40rem) {
+  .animated-tabs-seg-trigger,
+  .animated-tabs-seg-trigger > .tab-body { flex-direction: row; gap: 0.75rem; text-align: left; }
+  .animated-tabs-seg-trigger { justify-content: center; padding: 0.5rem 1rem; }
+  .tab-text { align-items: flex-start; }
+  .tab-text { display: flex; flex-direction: column; align-items: center; gap: 0.125rem; min-width: 0; }
+.tab-label { font-size: 0.9375rem; }
+}
