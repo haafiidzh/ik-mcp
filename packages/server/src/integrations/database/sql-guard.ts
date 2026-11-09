@@ -236,6 +236,20 @@ function lexicalCheck(s: string, dialect: DatabaseDialect): void {
   }
 }
 
+/**
+ * SQLite catalog internals (QA-03 F3): db_describe_table hides sqlite_ internals, so raw
+ * queries must not reach them either. Fail closed with a lexical match over the whole
+ * statement (quoted, bracketed and schema-qualified forms included; a string literal that
+ * merely mentions one of these names is rejected too). `\b` keeps user tables such as
+ * `my_sqlite_master` legal. sqlite_version() and similar scalar functions stay allowed.
+ */
+const SQLITE_INTERNALS =
+  /\b(?:sqlite_(?:master|schema|temp_master|temp_schema|sequence|stat\d+|dbpage)|pragma_[a-z0-9_]+|dbstat)\b/i;
+
+function checkSqliteInternals(sql: string, dialect: DatabaseDialect): void {
+  if (dialect === "sqlite" && SQLITE_INTERNALS.test(sql)) reject("SQLite internal tables and pragma functions are not allowed");
+}
+
 function parseOne(sql: string, dialect: DatabaseDialect): unknown {
   let ast: unknown;
   try {
@@ -259,10 +273,12 @@ export function assertReadOnlySql(sql: unknown, options: SqlGuardOptions): Valid
   if (statement.length === 0) throw new AppError("INVALID_INPUT", "sql must not be empty.");
 
   if (startsWithValues(statement)) {
+    checkSqliteInternals(statement, options.dialect);
     validateValues(statement);
     return { dialect: options.dialect, statement, kind: "values" };
   }
   lexicalCheck(statement, options.dialect);
+  checkSqliteInternals(statement, options.dialect);
   const root = parseOne(statement, options.dialect);
   const top = typeof root === "object" && root !== null ? (root as Record<string, unknown>)["type"] : undefined;
   if (typeof top !== "string" || top.toLowerCase() !== "select") reject("only SELECT statements are allowed");

@@ -1,4 +1,6 @@
-import { statSync } from "node:fs";
+import { fork, type ChildProcess } from "node:child_process";
+import { existsSync, statSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import Database from "better-sqlite3";
 import { AppError } from "../../core/errors.js";
 import { DEFAULT_LIMITS } from "../../core/limits.js";
@@ -29,12 +31,11 @@ import type { AdapterFactory } from "./database.registry.js";
  *    single statement (better-sqlite3 refuses several), so ATTACH, PRAGMA writes
  *    and DML are refused before execution even if the guard were bypassed.
  *
- * TIMEOUT (S9): better-sqlite3 is synchronous and exposes no interrupt or
- * progress handler, so a running native step cannot be preempted in-process.
- * The deadline is cooperative: it is checked between result rows and once more
- * when the statement finishes, so a slow query that streams rows is aborted
- * mid-way and a single long step is reported as TIMEOUT after it returns. The
- * event loop is blocked while a step runs. See implementation-notes "P2-02".
+ * TIMEOUT (S9, QA-03 F1): better-sqlite3 is synchronous and has no interrupt,
+ * and Worker.terminate() cannot preempt a native step. query/explain therefore
+ * run in a child process (sqlite.runner.ts) that this adapter SIGKILLs on
+ * timeout or abort and recreates lazily. The catalog helpers stay in-process
+ * (fixed, bounded statements). See implementation-notes "P2-07".
  *
  * Errors never carry the database path: open failures use fixed text, driver
  * messages are scrubbed of the path and length-capped.
@@ -46,6 +47,8 @@ export const MAX_CATALOG_ENTRIES = 1000;
 const MAX_ERROR_MESSAGE_CHARS = 200;
 const BUSY_TIMEOUT_MS = 1000;
 const TRUNCATION_MARK = "…";
+const EXPLAIN_TIMEOUT_MS = 5000;
+const RUNNER_START_TIMEOUT_MS = 10_000;
 
 export interface SqliteConnection extends ConnectionInfo {
   type: "sqlite";
@@ -149,25 +152,6 @@ function positiveInt(value: number, name: string): number {
   return value;
 }
 
-function convertCell(value: unknown, maxCellChars: number, flags: { cut: boolean }): unknown {
-  if (value === null || value === undefined) return null;
-  switch (typeof value) {
-    case "number":
-      return value;
-    case "bigint":
-      return value >= BigInt(Number.MIN_SAFE_INTEGER) && value <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(value) : value.toString();
-    case "string":
-      if (value.length > maxCellChars) {
-        flags.cut = true;
-        return `${value.slice(0, Math.max(0, maxCellChars - 1))}${TRUNCATION_MARK}`;
-      }
-      return value;
-    default:
-      if (value instanceof Uint8Array) return `<binary ${value.byteLength} bytes>`;
-      return `<unsupported ${typeof value}>`;
-  }
-}
-
 function stripTrailingSemicolon(sql: string): string {
   return sql.replace(/;\s*$/, "");
 }
@@ -199,12 +183,226 @@ function checkSchema(schema: string | undefined): void {
   }
 }
 
+
+interface RunSpec {
+  op: "query" | "explain";
+  sql: string;
+  maxRows: number;
+  maxCellChars: number;
+  timeoutMs: number;
+}
+
+type RunnerError =
+  | { kind: "app"; code: string; message: string }
+  | { kind: "driver"; code: string; message: string }
+  | { kind: "type"; message: string }
+  | { kind: "other" };
+
+type RunnerReply = { id: number; ok: true; result: unknown } | { id: number; ok: false; error: RunnerError };
+
+/** Children alive in this process; killed on exit so no runner outlives the server. */
+const liveChildren = new Set<ChildProcess>();
+let exitHookInstalled = false;
+
+function installExitHook(): void {
+  if (exitHookInstalled) return;
+  exitHookInstalled = true;
+  process.once("exit", () => {
+    for (const c of liveChildren) c.kill("SIGKILL");
+  });
+}
+
+/** `.js` next to this file in dist; `.ts` (Node type stripping) when running from src under tsx/vitest. */
+function runnerEntry(): { file: string; execArgv: string[] } {
+  const js = fileURLToPath(new URL("./sqlite.runner.js", import.meta.url));
+  if (existsSync(js)) return { file: js, execArgv: [] };
+  return { file: fileURLToPath(new URL("./sqlite.runner.ts", import.meta.url)), execArgv: ["--experimental-strip-types", "--disable-warning=ExperimentalWarning"] };
+}
+
+/**
+ * Startup check (P2-11): when an enabled sqlite connection exists, the runner file must be present.
+ * Returns true when usable (or nothing to check); otherwise calls `warn` with a fixed, path-free message
+ * and returns false. Does not throw: other packs keep working and db_* keep returning INTEGRATION_UNAVAILABLE.
+ */
+export function checkSqliteRunner(
+  connections: readonly { type: string; enabled: boolean }[],
+  warn: (message: string) => void,
+  exists: (file: string) => boolean = existsSync,
+): boolean {
+  if (!connections.some((c) => c.type === "sqlite" && c.enabled)) return true;
+  if (exists(runnerEntry().file)) return true;
+  warn("SQLite worker file is missing (incomplete build or install): db_* tools for sqlite connections will return INTEGRATION_UNAVAILABLE. Run the build.");
+  return false;
+}
+
+function rebuildError(err: RunnerError): Error {
+  switch (err.kind) {
+    case "app": {
+      const known = ["INTEGRATION_UNAVAILABLE", "QUERY_REJECTED", "LIMIT_EXCEEDED", "INTERNAL_ERROR"] as const;
+      const code = known.find((k) => k === err.code) ?? "INTERNAL_ERROR";
+      return new AppError(code, err.message);
+    }
+    case "driver": {
+      const e = new Error(err.message);
+      e.name = "SqliteError";
+      (e as { code?: string }).code = err.code;
+      return e;
+    }
+    case "type":
+      return new TypeError(err.message);
+    default:
+      return new AppError("INTERNAL_ERROR", "Unexpected database error.");
+  }
+}
+
+interface Runner {
+  run<T>(spec: RunSpec, signal: AbortSignal | undefined): Promise<T>;
+  dispose(): void;
+}
+
+/**
+ * One lazily forked runner process per adapter, one request at a time (queued).
+ * The deadline starts when the request is dispatched, not when it was queued.
+ */
+function createRunner(databasePath: string): Runner {
+  let child: ChildProcess | undefined;
+  let childReady: Promise<void> = Promise.resolve();
+  let disposed = false;
+  let tail: Promise<unknown> = Promise.resolve();
+  let nextId = 1;
+  let cancelCurrent: ((e: AppError) => void) | undefined;
+
+  function spawnChild(): ChildProcess {
+    const entry = runnerEntry();
+    installExitHook();
+    // stdio ignored: the runner can never write to our stdout/stderr. Empty env: no secrets inherited.
+    const c = fork(entry.file, [], {
+      execArgv: entry.execArgv,
+      env: {},
+      stdio: ["ignore", "ignore", "ignore", "ipc"],
+      serialization: "advanced",
+    });
+    liveChildren.add(c);
+    childReady = new Promise<void>((resolve, reject) => {
+      const startTimer = setTimeout(() => {
+        kill(c);
+        reject(new AppError("INTEGRATION_UNAVAILABLE", "The database worker could not be started."));
+      }, RUNNER_START_TIMEOUT_MS);
+      const onReady = (raw: unknown): void => {
+        if (raw !== null && typeof raw === "object" && (raw as { ready?: unknown }).ready === true) {
+          clearTimeout(startTimer);
+          c.removeListener("message", onReady);
+          resolve();
+        }
+      };
+      c.on("message", onReady);
+      c.once("exit", () => {
+        clearTimeout(startTimer);
+        reject(new AppError("INTEGRATION_UNAVAILABLE", "The database worker could not be started."));
+      });
+    });
+    childReady.catch(() => undefined);
+    c.once("exit", () => {
+      liveChildren.delete(c);
+      if (child === c) child = undefined;
+    });
+    return c;
+  }
+
+  function kill(c: ChildProcess): void {
+    if (child === c) child = undefined;
+    c.removeAllListeners("message");
+    c.kill("SIGKILL");
+  }
+
+  async function dispatch<T>(spec: RunSpec, signal: AbortSignal | undefined): Promise<T> {
+    if (disposed) throw new AppError("INTEGRATION_UNAVAILABLE", "The database connection is closed.");
+    if (child === undefined) {
+      try {
+        child = spawnChild();
+      } catch (e) {
+        throw new AppError("INTERNAL_ERROR", "Unexpected database error.", { cause: e });
+      }
+    }
+    await childReady;
+    return new Promise<T>((resolve, reject) => {
+      if (disposed) return reject(new AppError("INTEGRATION_UNAVAILABLE", "The database connection is closed."));
+      if (signal?.aborted === true) return reject(new AppError("TIMEOUT", "Query was cancelled."));
+      const c = child;
+      if (c === undefined) return reject(new AppError("INTERNAL_ERROR", "Unexpected database error."));
+      const id = nextId++;
+      let settled = false;
+      const finish = (fn: () => void): void => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        signal?.removeEventListener("abort", onAbort);
+        c.removeListener("error", onGone);
+        c.removeListener("exit", onGone);
+        c.removeListener("message", onMessage);
+        cancelCurrent = undefined;
+        fn();
+      };
+      const fail = (e: AppError, killChild: boolean): void =>
+        finish(() => {
+          if (killChild) kill(c);
+          reject(e);
+        });
+      const onAbort = (): void => fail(new AppError("TIMEOUT", "Query was cancelled."), true);
+      const onGone = (): void => fail(new AppError("INTERNAL_ERROR", "Unexpected database error."), true);
+      const onMessage = (raw: unknown): void => {
+        const msg = raw as RunnerReply;
+        if (msg === null || typeof msg !== "object" || msg.id !== id) return;
+        finish(() => {
+          if (msg.ok) resolve(msg.result as T);
+          else reject(rebuildError(msg.error));
+        });
+      };
+      const timer = setTimeout(
+        () => fail(new AppError("TIMEOUT", `Query exceeded the time limit of ${spec.timeoutMs} ms.`), true),
+        spec.timeoutMs,
+      );
+      cancelCurrent = (e) => fail(e, true);
+      signal?.addEventListener("abort", onAbort, { once: true });
+      c.on("message", onMessage);
+      c.once("error", onGone);
+      c.once("exit", onGone);
+      try {
+        c.send({ id, databasePath, ...spec });
+      } catch {
+        onGone();
+      }
+    });
+  }
+
+  return {
+    run<T>(spec: RunSpec, signal: AbortSignal | undefined): Promise<T> {
+      const result = tail.then(() => dispatch<T>(spec, signal));
+      tail = result.catch(() => undefined);
+      return result;
+    },
+    dispose() {
+      disposed = true;
+      cancelCurrent?.(new AppError("INTEGRATION_UNAVAILABLE", "The database connection is closed."));
+      if (child !== undefined) kill(child);
+    },
+  };
+}
+
 export function createSqliteAdapter(connection: SqliteConnection, options: SqliteAdapterOptions = {}): DatabaseAdapter {
   const databasePath = connection.databasePath;
   const maxCellChars = positiveInt(options.maxCellChars ?? DEFAULT_LIMITS.maxCellChars, "maxCellChars");
   const maxCatalog = positiveInt(options.maxCatalogEntries ?? MAX_CATALOG_ENTRIES, "maxCatalogEntries");
   const db = openSqliteReadOnly(databasePath);
   let closed = false;
+  const rawRunner = createRunner(databasePath);
+  const runner: Runner = {
+    run: <T>(spec: RunSpec, signal: AbortSignal | undefined): Promise<T> =>
+      rawRunner.run<T>(spec, signal).catch((e: unknown) => {
+        throw mapError(e, databasePath);
+      }),
+    dispose: () => rawRunner.dispose(),
+  };
 
   function live(): Db {
     if (closed || !db.open) throw new AppError("INTEGRATION_UNAVAILABLE", "The database connection is closed.");
@@ -367,77 +565,37 @@ export function createSqliteAdapter(connection: SqliteConnection, options: Sqlit
       });
     },
 
-    query(sql: string, opts: QueryOptions) {
-      return guarded((conn): QueryResult => {
+    query(sql: string, opts: QueryOptions): Promise<QueryResult> {
+      try {
+        live();
         if (typeof sql !== "string" || sql.length === 0) throw new AppError("INVALID_INPUT", "sql must be a non-empty string.");
         const maxRows = positiveInt(opts.maxRows, "maxRows");
         const timeoutMs = positiveInt(opts.timeoutMs, "timeoutMs");
-        const started = Date.now();
-        const deadline = started + timeoutMs;
-        const timedOut = (): AppError => new AppError("TIMEOUT", `Query exceeded the time limit of ${timeoutMs} ms.`);
-        const aborted = (): AppError => new AppError("TIMEOUT", "Query was cancelled.");
-
-        // better-sqlite3 refuses more than one statement here (TypeError -> INVALID_INPUT).
-        const stmt = conn.prepare(sql);
-        // Connection-level read-only (independent of sql-guard): only a reader that does not write may run.
-        if (!stmt.reader || !stmt.readonly) throw new AppError("QUERY_REJECTED", "Query rejected: only read-only statements can run.");
-        stmt.raw(true).safeIntegers(true);
-        const columns = stmt.columns().map((c) => c.name);
-
-        const rows: unknown[][] = [];
-        let truncated = false;
-        const cellFlags = { cut: false };
-        const iterator = stmt.iterate() as IterableIterator<unknown>;
-        try {
-          for (;;) {
-            if (opts.signal?.aborted === true) throw aborted();
-            const step = iterator.next();
-            if (Date.now() > deadline) throw timedOut();
-            if (step.done === true) break;
-            if (rows.length >= maxRows) {
-              // The (maxRows + 1)th row proves truncation; it is not returned.
-              truncated = true;
-              break;
-            }
-            const row = step.value;
-            if (!Array.isArray(row)) throw new AppError("INTERNAL_ERROR", "Unexpected row shape from the database.");
-            rows.push(row.map((cell) => convertCell(cell, maxCellChars, cellFlags)));
-          }
-        } finally {
-          iterator.return?.();
-        }
-        return { columns, rows, rowCount: rows.length, truncated, cellsTruncated: cellFlags.cut };
-      });
+        return runner.run<QueryResult>({ op: "query", sql, maxRows, maxCellChars, timeoutMs }, opts.signal);
+      } catch (e) {
+        return Promise.reject(mapError(e, databasePath));
+      }
     },
 
     explain(sql: string): Promise<ExplainResult> {
-      return guarded((conn) => {
+      try {
+        live();
         if (typeof sql !== "string" || sql.length === 0) throw new AppError("INVALID_INPUT", "sql must be a non-empty string.");
         // The adapter owns the prefix: `sql` is the already-validated user statement. Never ANALYZE (SQLite has none).
         if (/^\s*explain\b/i.test(sql)) throw new AppError("QUERY_REJECTED", "Query rejected: pass the query itself, not an EXPLAIN statement.");
-        const stmt = conn.prepare(`EXPLAIN QUERY PLAN\n${stripTrailingSemicolon(sql)}`);
-        if (!stmt.reader || !stmt.readonly) throw new AppError("QUERY_REJECTED", "Query rejected: only read-only statements can run.");
-        stmt.raw(true);
-        const rows = stmt.all() as unknown[][];
-        if (rows.length > 500) throw new AppError("LIMIT_EXCEEDED", "The query plan is too large to return.");
-        // Columns: id, parent, notused, detail. Render the parent/child tree as indented text.
-        const depth = new Map<number, number>([[0, -1]]);
-        const lines: string[] = [];
-        for (const r of rows) {
-          const id = Number(r[0]);
-          const parent = Number(r[1]);
-          const detail = typeof r[3] === "string" ? r[3] : "";
-          const level = (depth.get(parent) ?? -1) + 1;
-          depth.set(id, level);
-          lines.push(`${"  ".repeat(level)}${detail}`);
-        }
-        return { plan: lines.join("\n") };
-      });
+        return runner.run<ExplainResult>(
+          { op: "explain", sql: stripTrailingSemicolon(sql), maxRows: 1, maxCellChars, timeoutMs: EXPLAIN_TIMEOUT_MS },
+          undefined,
+        );
+      } catch (e) {
+        return Promise.reject(mapError(e, databasePath));
+      }
     },
 
     close() {
       if (!closed) {
         closed = true;
+        runner.dispose();
         try {
           db.close();
         } catch {

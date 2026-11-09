@@ -230,17 +230,18 @@ describe("S10: nothing from arguments can choose a database file", () => {
   });
 
   it("error messages never contain the database path", async () => {
+    // Attach handlers immediately: the runner rejects asynchronously.
     const attempts = [
       adapter.query("SELECT * FROM nope", opts),
       adapter.query("SELEC", opts),
       adapter.describeTable("nope"),
       adapter.explain("SELECT * FROM nope"),
-    ];
+    ].map((p) => p.then(() => undefined, (e: unknown) => ({ e })));
     for (const p of attempts) {
-      try {
-        await p;
-        throw new Error("expected rejection");
-      } catch (e) {
+      {
+        const settled = await p;
+        if (settled === undefined) throw new Error("expected rejection");
+        const e = settled.e;
         expect(e).toBeInstanceOf(AppError);
         const msg = (e as AppError).message;
         expect(msg).not.toContain(fx.dir);
