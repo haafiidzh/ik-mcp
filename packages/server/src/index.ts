@@ -4,12 +4,17 @@ import { createAuditLog } from "./core/audit.js";
 import { resolveLimits } from "./core/limits.js";
 import { createLogger } from "./core/logger.js";
 import { collectSecretValues, createRedactor } from "./core/redact.js";
+import { checkSqliteRunner } from "./integrations/database/sqlite.adapter.js";
+import { validateApiProfiles } from "./integrations/custom-api/api.service.js";
 import { createServer } from "./server/create-server.js";
 
 /** stdout is reserved for MCP JSON-RPC; everything here logs to stderr. */
 async function main(): Promise<void> {
   const loaded = loadConfig();
   const { config } = loaded;
+
+  // Fail closed at startup on invalid endpoint schemas (config load does not compile them).
+  validateApiProfiles(config.customApis);
 
   const secretEnvNames: string[] = [];
   if (config.github.tokenEnv) secretEnvNames.push(config.github.tokenEnv);
@@ -33,6 +38,7 @@ async function main(): Promise<void> {
     redactor,
     onError: (m) => logger.warn(m),
   });
+  checkSqliteRunner(config.databases, (m) => logger.warn(m));
   const limits = resolveLimits(config.limits);
   const startedAtMs = Date.now();
 

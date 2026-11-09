@@ -8,7 +8,13 @@ import { AppError } from "../core/errors.js";
 import { fail, ok, toMcpResult, type McpToolResult, type ToolResult } from "../core/response.js";
 import { createDatabaseRegistry, type AdapterFactories } from "../integrations/database/database.registry.js";
 import { registerDatabaseTools } from "../tools/database/index.js";
+import type { FetchLike } from "../integrations/github/github.client.js";
 import { registerFilesystemTools } from "../tools/filesystem/index.js";
+import { registerGithubTools } from "../tools/github/index.js";
+import { registerCustomApiTools } from "../tools/custom-api/index.js";
+import type { ResolveFn } from "../integrations/custom-api/url-guard.js";
+import { registerWorkflowTools } from "../tools/workflows/index.js";
+import { createSharedServices, type SharedServices } from "./shared-services.js";
 import { buildStatus, resolvePackState } from "./status.js";
 
 export interface ServerDeps {
@@ -20,6 +26,22 @@ export interface ServerDeps {
   startedAtMs: number;
   /** Test seam: replaces the real adapter factories (for example a fake PostgreSQL pool). */
   databaseFactories?: AdapterFactories<DatabaseConnection>;
+  /**
+   * Test seams for the GitHub pack. Set only by code that builds ServerDeps (tests); never from
+   * config or tool input. Production (`src/index.ts`) leaves both unset: global fetch to the fixed
+   * https://api.github.com and real process.env.
+   */
+  githubFetch?: FetchLike;
+  githubGetEnv?: (name: string) => string | undefined;
+  /**
+   * Test seams for the Custom API pack (same rules as the GitHub seams: set only by code that builds
+   * ServerDeps, never from config or tool input). `apiResolve` replaces DNS (the answer is still
+   * SSRF-checked and then pinned); `apiGetEnv` replaces process.env for auth variables.
+   */
+  apiResolve?: ResolveFn;
+  apiGetEnv?: (name: string) => string | undefined;
+  /** P5-05: service instances shared by pack tools and workflow tools. Set by registerTools only. */
+  shared?: SharedServices;
 }
 
 export type DatabaseConnection = Config["databases"][number];
@@ -53,6 +75,8 @@ export async function runTool(
   integration: string,
   handler: () => Promise<ToolResult> | ToolResult,
   resourceRef?: string,
+  /** P4-03: evaluated after the handler; must derive write-ness from CONFIG (never from tool input). */
+  isWriteAttempt?: () => boolean,
 ): Promise<McpToolResult> {
   const t0 = Date.now();
   let result: ToolResult;
@@ -62,6 +86,12 @@ export async function runTool(
     deps.logger.error("tool failed", { tool, error: err instanceof Error ? err.message : "unknown" });
     result = fail(err);
   }
+  let write = false;
+  try {
+    write = isWriteAttempt?.() === true;
+  } catch {
+    write = false;
+  }
   deps.audit.record({
     tool,
     integration,
@@ -69,7 +99,7 @@ export async function runTool(
     outcome: result.success ? "success" : "error",
     ...(!result.success ? { errorCode: result.error.code } : {}),
     durationMs: Date.now() - t0,
-    write: false,
+    write,
   });
   return toMcpResult(result, deps.redactor, deps.limits.maxResponseBytes);
 }
@@ -78,7 +108,9 @@ export async function runTool(
  * Registers tools. A disabled pack's tools are NOT registered (doc 03 §4).
  * Pack registrars are added by later tasks (P1+) inside the matching `if`.
  */
-export function registerTools(server: McpServer, deps: ServerDeps): string[] {
+export function registerTools(server: McpServer, baseDeps: ServerDeps): string[] {
+  baseDeps.shared ??= createSharedServices(baseDeps); // also visible to registerResources (P6-01)
+  const deps: ServerDeps = { ...baseDeps, shared: baseDeps.shared };
   const registered: string[] = [];
 
   server.registerTool(
@@ -100,30 +132,35 @@ export function registerTools(server: McpServer, deps: ServerDeps): string[] {
   registered.push("server_get_status");
 
   const packs = resolvePackState(deps.config);
+  let registry: ReturnType<typeof createDatabaseRegistry<DatabaseConnection>> | undefined;
   if (packs.database) {
-    const registry = createDatabaseRegistry<DatabaseConnection>(
+    registry = createDatabaseRegistry<DatabaseConnection>(
       deps.config.databases,
       deps.databaseFactories ?? defaultDatabaseFactories(deps),
     );
+    const reg = registry;
+    if (deps.shared !== undefined) deps.shared.databaseRegistry = registry;
     registered.push(...registerDatabaseTools(server, deps, registry, runTool));
     // Release connections when the transport closes (best effort; never throws).
     const previous = server.server.onclose;
     server.server.onclose = () => {
       previous?.();
-      registry.closeAll().catch(() => undefined);
+      reg.closeAll().catch(() => undefined);
     };
   }
   if (packs.filesystem) {
     registered.push(...registerFilesystemTools(server, deps, runTool));
   }
   if (packs.github) {
-    // P3: registerGithubTools(server, deps)
+    if (deps.config.github.allowedRepositories.length === 0 && deps.config.github.allowedOwners.length === 0) {
+      deps.logger.warn("github is enabled but no allowlist is configured (allowedRepositories/allowedOwners); all github tools will return PERMISSION_DENIED");
+    }
+    registered.push(...registerGithubTools(server, deps, runTool));
   }
   if (packs.customApi) {
-    // P4: registerCustomApiTools(server, deps)
+    registered.push(...registerCustomApiTools(server, deps, runTool));
   }
-  if (packs.workflows) {
-    // P5: registerWorkflowTools(server, deps)
-  }
+  // Phase 5 composite tools: each is registered only when its required packs are enabled (doc 04 §5).
+  registered.push(...registerWorkflowTools(server, deps, runTool, packs, registry));
   return registered;
 }

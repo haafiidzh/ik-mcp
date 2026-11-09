@@ -48,6 +48,7 @@ export function buildFsContext(
   const config: Config = deps.config;
   let pending: Promise<FilesystemService> | undefined;
   const service = (): Promise<FilesystemService> => {
+    if (deps.shared !== undefined) return deps.shared.fs();
     pending ??= createFilesystemService({
       workspaces: config.workspaces.map((w) => ({ id: w.id, rootPath: w.rootPath })),
       blockedNames: config.filesystem.blockedNames,

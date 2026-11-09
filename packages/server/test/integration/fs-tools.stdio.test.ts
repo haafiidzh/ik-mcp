@@ -165,7 +165,7 @@ describe("fs_* tools over stdio (P1-03)", () => {
   it("registers the six tools only when the filesystem pack is enabled", async () => {
     const on = await open(cfgPath);
     const tools = await on.tools();
-    expect(tools.map((t) => t.name).sort()).toEqual(["server_get_status", ...FS_TOOLS].sort());
+    expect(tools.map((t) => t.name).sort()).toEqual(["server_get_status", ...FS_TOOLS, "workspace_get_overview"].sort()); // P5-05: the overview workflow needs only the filesystem pack
     for (const t of tools.filter((x) => x.name.startsWith("fs_"))) {
       expect(t.description).toMatch(/^Read-only\./);
       expect(t.annotations?.["readOnlyHint"]).toBe(true);

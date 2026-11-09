@@ -35,7 +35,7 @@ function run(cfg: string, how: "eof" | "sigterm"): Promise<{ code: number | null
     const guard = setTimeout(() => {
       child.kill("SIGKILL");
       reject(new Error("process did not exit"));
-    }, 8000);
+    }, 30000);
     child.on("exit", (code, signal) => {
       clearTimeout(guard);
       resolve({ code, signal, out, err });
@@ -44,7 +44,23 @@ function run(cfg: string, how: "eof" | "sigterm"): Promise<{ code: number | null
     send({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "qa", version: "1" } } });
     send({ jsonrpc: "2.0", method: "notifications/initialized" });
     send({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "server_get_status", arguments: {} } });
-    setTimeout(() => (how === "eof" ? child.stdin.end() : child.kill("SIGTERM")), 1500);
+    // Wait for readiness (id 2 response) instead of a fixed delay: tsx cold start
+    // can be slow under load and SIGTERM before the handler is installed kills the child.
+    let signalled = false;
+    child.stdout.on("data", () => {
+      if (signalled) return;
+      const ready = out.split("\n").some((l) => {
+        try {
+          return (JSON.parse(l) as { id?: number }).id === 2;
+        } catch {
+          return false;
+        }
+      });
+      if (!ready) return;
+      signalled = true;
+      if (how === "eof") child.stdin.end();
+      else child.kill("SIGTERM");
+    });
   });
 }
 
@@ -61,6 +77,6 @@ describe("QA-01 startup/shutdown security", () => {
       expect(all).not.toContain(CANARY);
       expect(all).not.toContain("QA_CANARY_TOKEN");
       expect(r.out).not.toContain(path.dirname(cfg));
-    }, 15000);
+    }, 45000);
   }
 });

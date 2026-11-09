@@ -112,6 +112,7 @@ describe("stdio server (P0-05)", () => {
         "fs_search_content",
         "fs_search_files",
         "server_get_status",
+        "workspace_get_overview", // P5-05: needs only the filesystem pack
       ].sort(),
     );
 
@@ -134,7 +135,7 @@ describe("stdio server (P0-05)", () => {
       github: false,
       customApi: false,
       filesystem: true,
-      workflows: false,
+      workflows: true, // P5-05: workspace_get_overview is registered with the filesystem pack
     });
     expect(sc.data.limits.dbMaxRows).toBe(7);
     expect(typeof sc.data["uptimeSeconds"]).toBe("number");

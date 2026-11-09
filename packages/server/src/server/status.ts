@@ -18,8 +18,9 @@ export function resolvePackState(config: Config): PackState {
     github: config.github.enabled,
     customApi: config.customApis.some((a) => a.enabled),
     filesystem: config.filesystem.enabled,
-    // Workflows (Phase 5) have no config switch yet; they stay off until implemented.
-    workflows: false,
+    // Workflows (Phase 5) have no config switch: true when at least one workflow tool is registered
+    // (overview/data-flow need filesystem, activity needs github; the rest need both).
+    workflows: config.filesystem.enabled || config.github.enabled,
   };
 }
 
