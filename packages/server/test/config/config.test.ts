@@ -34,10 +34,11 @@ function writeCfg(dir: string, raw: unknown, file = "devworkspace.json"): string
 }
 
 describe("example config", () => {
-  it("validates and enables only the filesystem pack", () => {
+  it("validates and enables only the filesystem pack and the read-only local-sqlite", () => {
     const c = parseConfigText(readFileSync(examplePath, "utf8"));
     expect(c.filesystem.enabled).toBe(true);
-    expect(c.databases.filter((d) => d.enabled).map((d) => d.name)).toEqual([]);
+    expect(c.databases.filter((d) => d.enabled).map((d) => d.name)).toEqual(["local-sqlite"]);
+    expect(c.databases.every((d) => d.readOnly)).toBe(true);
     expect(c.workspaces.map((w) => w.id)).toEqual(["sample-project"]);
     expect(c.github.enabled).toBe(false);
     expect(c.customApis.every((a) => !a.enabled)).toBe(true);

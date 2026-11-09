@@ -161,6 +161,20 @@ export function fitToBudget<T>(result: ToolResult<T>, maxBytes: number): ToolRes
       if (isObj(data["counts"])) next["counts"] = treeCounts(pruned);
       return mark(next, n);
     };
+  } else if (isObj(data) && Array.isArray(data["sections"]) && data["sections"].every(isObj)) {
+    // Workflow shape (P5-06, ADR-104): keep the first n sections whole; later ones keep id/title/status/source/error
+    // but their data is omitted and they are marked truncated (status "ok" becomes "partial").
+    const sections = data["sections"] as Record<string, unknown>[];
+    total = sections.length;
+    build = (n) => {
+      const cut = sections.map((sec, i) => {
+        if (i < n || !("data" in sec)) return sec;
+        const { data: _omitted, ...rest } = sec;
+        void _omitted;
+        return { ...rest, status: rest["status"] === "ok" ? "partial" : rest["status"], truncated: true, dataOmitted: true };
+      });
+      return mark({ ...data, sections: cut }, n);
+    };
   } else {
     // Unknown shape (cannot be cut): refuse with a small error rather than exceed the budget (ADR-044).
     return fail(new AppError("LIMIT_EXCEEDED", "Result is larger than the configured maximum response size and cannot be truncated."));
@@ -169,6 +183,9 @@ export function fitToBudget<T>(result: ToolResult<T>, maxBytes: number): ToolRes
   let lo = 0;
   let hi = total - 1;
   let best = build(0);
+  if (Array.isArray(data) === false && isObj(data) && Array.isArray(data["sections"]) && wireSize(best) > maxBytes) {
+    return fail(new AppError("LIMIT_EXCEEDED", "Result is larger than the configured maximum response size and cannot be truncated."));
+  }
   while (lo <= hi) {
     const mid = Math.floor((lo + hi) / 2);
     const cand = build(mid);

@@ -14,7 +14,9 @@
       "id": "sample-project",
       "name": "Sample Project",
       "rootPath": "../test/fixtures/sample-workspace",
-      "databases": []
+      "databases": [
+        "local-sqlite"
+      ]
     }
   ],
   "filesystem": {
@@ -41,7 +43,7 @@
     {
       "name": "local-sqlite",
       "type": "sqlite",
-      "enabled": false,
+      "enabled": true,
       "databasePath": "./data/sample.db",
       "readOnly": true
     },

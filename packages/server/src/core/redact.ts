@@ -40,10 +40,29 @@ export function collectSecretValues(
   return out;
 }
 
+const MIN_VARIANT_LENGTH = 8;
+
+/** Encoded forms of a secret an API might echo back (P4-05): base64 (standard, URL-safe, unpadded), percent-encoding (upper- and lower-case digits), hex (lower- and upper-case). */
+export function encodedVariants(secret: string): string[] {
+  const b64 = Buffer.from(secret, "utf8").toString("base64");
+  const forms = new Set<string>([
+    b64,
+    b64.replace(/=+$/, ""),
+    b64.replace(/\+/g, "-").replace(/\//g, "_"),
+    b64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""),
+    encodeURIComponent(secret),
+    Buffer.from(secret, "utf8").toString("hex"),
+    Buffer.from(secret, "utf8").toString("hex").toUpperCase(),
+    encodeURIComponent(secret).replace(/%[0-9A-F]{2}/g, (m) => m.toLowerCase()),
+  ]);
+  forms.delete(secret);
+  return [...forms].filter((f) => f.length >= MIN_VARIANT_LENGTH);
+}
+
 export function createRedactor(options: RedactorOptions = {}): Redactor {
   // Longest first so a secret containing another is scrubbed whole.
-  const secrets = [...(options.secretValues ?? [])]
-    .filter((s) => s.length >= MIN_SECRET_LENGTH)
+  const base = [...(options.secretValues ?? [])].filter((s) => s.length >= MIN_SECRET_LENGTH);
+  const secrets = [...new Set([...base, ...base.flatMap(encodedVariants)])]
     .sort((a, b) => b.length - a.length);
   const extraKeys = new Set((options.sensitiveFields ?? []).map((k) => k.toLowerCase()));
 

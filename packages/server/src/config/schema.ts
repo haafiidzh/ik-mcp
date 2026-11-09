@@ -118,14 +118,30 @@ const githubSchema = z.strictObject({
 
 const httpMethod = z.enum(["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"]);
 
+/**
+ * Endpoint parameter spec: the JSON-schema-like subset compiled to Zod by
+ * `integrations/custom-api/endpoint-schema.ts` (doc 04 section C). Recursive for
+ * array `items` and object `properties`; depth and size caps are enforced by the
+ * compiler (fail closed). `pattern` is length-capped here and checked there.
+ */
 const paramSpec = z.strictObject({
-  type: z.enum(["string", "number", "integer", "boolean"]),
+  type: z.enum(["string", "number", "integer", "boolean", "array", "object"]),
   description: z.string().optional(),
   required: z.boolean().optional(),
   enum: z.array(z.union([z.string(), z.number()])).optional(),
   minimum: z.number().optional(),
   maximum: z.number().optional(),
+  minLength: z.number().int().nonnegative().optional(),
   maxLength: posInt.optional(),
+  pattern: z.string().max(200).optional(),
+  minItems: z.number().int().nonnegative().optional(),
+  maxItems: posInt.optional(),
+  get items(): z.ZodOptional<typeof paramSpec> {
+    return paramSpec.optional();
+  },
+  get properties(): z.ZodOptional<z.ZodRecord<z.ZodString, typeof paramSpec>> {
+    return z.record(z.string(), paramSpec).optional();
+  },
 });
 
 const endpointSchema = z.strictObject({

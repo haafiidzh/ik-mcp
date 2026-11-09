@@ -84,13 +84,20 @@ export function truncateList<T>(items: readonly T[], limit: number): Bounded<T> 
   return { items: [...items], meta: { truncated: false } };
 }
 
-/** Truncate a string to maxChars (UTF-16 units) and report truncation. */
+/** Truncate a string to at most maxChars UTF-16 units (code point boundary) and report truncation. */
 export function truncateString(
   text: string,
   maxChars: number,
 ): { text: string; meta: TruncationMeta } {
   if (text.length > maxChars) {
-    return { text: text.slice(0, maxChars), meta: { truncated: true, limit: maxChars } };
+    // Never leave a lone high surrogate: drop it when the cut falls inside a pair.
+    let end = Math.max(0, maxChars);
+    if (end > 0 && end < text.length) {
+      const last = text.charCodeAt(end - 1);
+      const next = text.charCodeAt(end);
+      if (last >= 0xd800 && last <= 0xdbff && next >= 0xdc00 && next <= 0xdfff) end -= 1;
+    }
+    return { text: text.slice(0, end), meta: { truncated: true, limit: maxChars } };
   }
   return { text, meta: { truncated: false } };
 }

@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createAuditLog } from "./audit.js";
 import { AppError, ERROR_CODES, toErrorPayload } from "./errors.js";
-import { clampLimit, DEFAULT_LIMITS, LIMIT_MAXIMA, resolveLimits, truncateBytes, truncateList } from "./limits.js";
+import { clampLimit, DEFAULT_LIMITS, LIMIT_MAXIMA, resolveLimits, truncateBytes, truncateList, truncateString } from "./limits.js";
 import { createLogger } from "./logger.js";
 import { canRead, canWrite, DEFAULT_PERMISSIONS, isRegistered } from "./permissions.js";
 import { collectSecretValues, createRedactor, REDACTED } from "./redact.js";
@@ -155,5 +155,17 @@ describe("audit", () => {
     createAuditLog({ path: join(blocker, "audit.jsonl"), onError }).record({ tool: "t", integration: "i", outcome: "success", durationMs: 1, write: false });
     expect(onError).toHaveBeenCalled();
     rmSync(dir, { recursive: true, force: true });
+  });
+});
+
+describe("truncateString code point safety (P3-09)", () => {
+  it("does not leave a lone high surrogate at the cut", () => {
+    const r = truncateString("ab\u{1F600}cd", 3);
+    expect(r.text).toBe("ab");
+    expect(r.meta).toEqual({ truncated: true, limit: 3 });
+    expect(truncateString("ab\u{1F600}cd", 4).text).toBe("ab\u{1F600}");
+    expect(truncateString("\u{1F600}", 0).text).toBe("");
+    expect(truncateString("abc", 3)).toEqual({ text: "abc", meta: { truncated: false } });
+    expect(truncateString("abcdef", 3).text).toBe("abc");
   });
 });
