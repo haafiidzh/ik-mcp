@@ -12,3 +12,6 @@ export const NAV = [
 
 /** Every public route, used by the sitemap. */
 export const ROUTES = ["/", "/install", "/tools", "/security", "/demo"] as const;
+
+/** Public repository. Single source of truth: the publish name is still open (Q9), so change it only here. */
+export const REPO_URL = "https://github.com/haafiidzh/ik-mcp";

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { REPO_URL } from "@/lib/site";
 import { Wordmark } from "./logo";
 
 export function SiteFooter() {
@@ -21,8 +22,16 @@ export function SiteFooter() {
           </ul>
         </nav>
         <p className="max-w-xs text-sm text-muted-foreground">
-          Pre-release. Not published on npm. Verified on Linux/WSL only. Source repository link will be added here
-          when the project is published.
+          Pre-release. Not published on npm. Verified on Linux/WSL only.{" "}
+          <a
+            className="underline underline-offset-4 hover:text-foreground"
+            href={REPO_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Source on GitHub<span className="sr-only"> (opens in a new tab)</span>
+          </a>
+          .
         </p>
       </div>
     </footer>

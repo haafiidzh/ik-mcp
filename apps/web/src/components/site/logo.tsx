@@ -1,3 +1,5 @@
+import { EyeBlink } from "@/components/motion/eye-blink";
+import { EyeFollow } from "@/components/motion/eye-follow";
 import { cn } from "@/lib/utils";
 
 /** Geometric eye. Uses currentColor so it follows the theme. Decorative unless `title` is set. */
@@ -11,6 +13,7 @@ export function EyeMark({ className, title }: { className?: string; title?: stri
       aria-hidden={title ? undefined : true}
       focusable="false"
     >
+      <g className="ik-eye-lid">
       <path
         d="M2 16C6 9.5 11 6.5 16 6.5S26 9.5 30 16c-4 6.5-9 9.5-14 9.5S6 22.5 2 16Z"
         fill="none"
@@ -18,16 +21,21 @@ export function EyeMark({ className, title }: { className?: string; title?: stri
         strokeWidth="2.2"
         strokeLinejoin="round"
       />
-      <circle cx="16" cy="16" r="5.2" fill="currentColor" />
-      <circle cx="17.9" cy="14.1" r="1.7" fill="var(--background)" />
+      <g className="ik-eye-pupil">
+        <circle cx="16" cy="16" r="5.2" fill="currentColor" />
+        <circle cx="17.9" cy="14.1" r="1.7" fill="var(--background)" />
+      </g>
+      </g>
     </svg>
   );
 }
 
-export function Wordmark({ className }: { className?: string }) {
+export function Wordmark({ className, follow }: { className?: string; follow?: boolean }) {
   return (
     <span className={cn("inline-flex items-center gap-2 font-semibold tracking-tight", className)}>
       <EyeMark className="text-primary" />
+      {follow ? <EyeFollow /> : null}
+      {follow ? <EyeBlink /> : null}
       <span className="text-xl leading-none">ik</span>
     </span>
   );

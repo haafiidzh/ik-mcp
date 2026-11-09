@@ -1,0 +1,140 @@
+/*
+ * Global chrome motion (web-motion-spec 4.0, M-02). Imported from layout.tsx.
+ * Rules: transform/opacity only; keyframes are applied only inside (prefers-reduced-motion: no-preference);
+ * the base state is always the final state. Scroll-driven parts need @supports (animation-timeline) and
+ * otherwise stay in the plain static state. Tokens come from globals.css.
+ */
+
+/* ---- Header elevation: a shadow pseudo-element fades in over the first 64 px of scroll ---- */
+.site-header::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  box-shadow: 0 6px 14px -8px rgb(0 0 0 / 0.28);
+  opacity: 0;
+}
+
+/* ---- Reading progress bar: hidden unless scroll-driven animation is supported ---- */
+.scroll-progress {
+  display: none;
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  background: var(--primary);
+  transform: scaleX(0);
+  transform-origin: left;
+  pointer-events: none;
+}
+
+/* ---- Nav underline: grows from the left on hover/focus (not on the active pill) ---- */
+.nav-link {
+  position: relative;
+}
+.nav-link::after {
+  content: "";
+  position: absolute;
+  left: 0.75rem;
+  right: 0.75rem;
+  bottom: 0.25rem;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--primary);
+  transform: scaleX(0);
+  transform-origin: left;
+  pointer-events: none;
+}
+.nav-link[aria-current="page"]::after {
+  display: none;
+}
+
+/* ---- Logo eye: transform-box so SVG transforms use the element's own box ---- */
+.ik-eye-lid,
+.ik-eye-pupil {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes page-enter {
+    from {
+      opacity: 0;
+      transform: translateY(var(--shift-sm));
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  /* `backwards` only: after the animation the element has no transform (keeps sticky/fixed children safe). */
+  .page-enter {
+    animation: page-enter var(--dur-base) var(--ease-out) backwards;
+  }
+
+  @keyframes header-elevate {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  @keyframes progress-grow {
+    from {
+      transform: scaleX(0);
+    }
+    to {
+      transform: scaleX(1);
+    }
+  }
+  @supports (animation-timeline: scroll()) {
+    .site-header::after {
+      animation: header-elevate var(--ease-linear) both;
+      animation-timeline: scroll(root);
+      animation-range: 0 64px;
+    }
+    .scroll-progress {
+      display: block;
+      animation: progress-grow var(--ease-linear) both;
+      animation-timeline: scroll(root);
+    }
+  }
+
+  .nav-link::after {
+    transition: transform var(--dur-fast) var(--ease-out);
+  }
+  .nav-link:hover::after,
+  .nav-link:focus-visible::after {
+    transform: scaleX(1);
+  }
+
+  @keyframes eye-blink {
+    0%,
+    100% {
+      transform: scaleY(1);
+    }
+    50% {
+      transform: scaleY(0.15);
+    }
+  }
+  /* Runs once per full page load (the header persists across client navigations). No storage used. */
+  .ik-eye-lid {
+    animation: eye-blink var(--dur-base) var(--ease-inout) 500ms 1 backwards;
+  }
+  /* Periodic blink (P7-35): EyeBlink sets data-blink for one run and removes it on animationend. Never infinite. */
+  /* Distinct keyframes name: reusing `eye-blink` would not restart the finished load animation. */
+  @keyframes eye-blink-periodic {
+    0%,
+    100% {
+      transform: scaleY(1);
+    }
+    50% {
+      transform: scaleY(0.15);
+    }
+  }
+  .ik-eye-lid[data-blink] {
+    animation: eye-blink-periodic 160ms var(--ease-inout) 1;
+  }
+}
