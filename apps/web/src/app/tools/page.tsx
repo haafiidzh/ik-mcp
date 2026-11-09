@@ -5,6 +5,14 @@ import { PageShell, Section } from "@/components/shared/page-shell";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ERROR_CODES, PACKS } from "@/data/tools";
+import { PackSpy } from "@/components/motion/pack-spy";
+import { Reveal } from "@/components/motion/reveal";
+import { Stagger, StaggerItem } from "@/components/motion/stagger";
+import "../motion-tools.css";
+
+/** Cards beyond this index in a pack get an individual Reveal instead of a stagger slot. */
+const STAGGER_CARDS = 6;
+const SPY_IDS = [...PACKS.map((p) => `${p.id}-h`), "response-h", "errors-h"];
 
 export const metadata: Metadata = {
   title: "Tools reference",
@@ -31,7 +39,8 @@ export default function ToolsPage() {
       title="Tools reference"
       lead={`${shipped} tools are implemented, plus 5 resource URIs and 5 prompts. ${count.filter((t) => t.status === "not-shipped").length} GitHub write tools are planned but not shipped. Every tool is read-only by default; a call to a write-type API endpoint is denied unless writes are explicitly enabled.`}
     >
-      <nav aria-label="Packs on this page" className="mb-10">
+      <PackSpy navId="tools-packs" headingIds={SPY_IDS} />
+      <nav id="tools-packs" aria-label="Packs on this page" className="mb-10">
         <ul className="flex flex-wrap gap-2 text-sm">
           {PACKS.map((p) => (
             <li key={p.id}>
@@ -52,9 +61,10 @@ export default function ToolsPage() {
             <StatusBadge kind={pack.status === "implemented" ? "implemented" : "in-development"} />
             {pack.statusNote}
           </p>
-          <div className="not-prose max-w-none space-y-3">
-            {pack.tools.map((t) => (
-              <article key={t.name} id={t.name} aria-labelledby={`${t.name}-name`} className="scroll-mt-20 rounded-lg border bg-card p-4">
+          <Stagger className="not-prose max-w-none space-y-3">
+            {pack.tools.map((t, i) => {
+              const card = (
+              <article id={t.name} aria-labelledby={`${t.name}-name`} className="tool-card scroll-mt-20 rounded-lg border bg-card p-4">
                 <div className="flex flex-wrap items-center gap-2">
                   <h3 id={`${t.name}-name`} className="font-mono text-base font-semibold">
                     <a href={`#${t.name}`} className="hover:underline">{t.name}</a>
@@ -69,8 +79,14 @@ export default function ToolsPage() {
                 </p>
                 {t.note ? <p className="mt-1 text-sm text-muted-foreground">{t.note}</p> : null}
               </article>
-            ))}
-          </div>
+              );
+              return i < STAGGER_CARDS ? (
+                <StaggerItem key={t.name} index={i}>{card}</StaggerItem>
+              ) : (
+                <Reveal key={t.name}>{card}</Reveal>
+              );
+            })}
+          </Stagger>
         </Section>
       ))}
 
@@ -80,8 +96,8 @@ export default function ToolsPage() {
           Failures set the MCP error flag. Empty results are a success with a count of zero; a missing integration is an
           error, not an empty list; partial results say so in <code>meta.partial</code>.
         </p>
-        <CodeBlock code={SUCCESS} lang="json" label="Success envelope" noCopy />
-        <CodeBlock code={FAILURE} lang="json" label="Error envelope" noCopy />
+        <Reveal><CodeBlock code={SUCCESS} lang="json" label="Success envelope" noCopy /></Reveal>
+        <Reveal delay={80}><CodeBlock code={FAILURE} lang="json" label="Error envelope" noCopy /></Reveal>
         <Callout title="Limits apply to everything">
           <p>Lists, searches, reads and queries are bounded. When a result is cut, <code>meta.truncated</code> is true and <code>nextPageAvailable</code> says whether more exists.</p>
         </Callout>

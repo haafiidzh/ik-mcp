@@ -1,0 +1,56 @@
+/*
+ * /tools motion (web-motion-spec 4.3, M-10). opacity only; base state is the final state.
+ * Chip pill: a ::before layer whose opacity follows aria-current (set by PackSpy). Cards: :target ring fade.
+ */
+#tools-packs a {
+  position: relative;
+  isolation: isolate;
+}
+#tools-packs a::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: color-mix(in oklab, var(--primary) 14%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--primary) 55%, transparent);
+  opacity: 0;
+  pointer-events: none;
+}
+#tools-packs a[aria-current="true"]::before {
+  opacity: 1;
+}
+
+.tool-card {
+  position: relative;
+}
+.tool-card::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  border: 2px solid var(--primary);
+  opacity: 0;
+  pointer-events: none;
+}
+/* Reduced motion: a static, quiet marker so a deep link is still visible. */
+.tool-card:target::after {
+  opacity: 0.4;
+}
+@media (prefers-reduced-motion: no-preference) {
+  #tools-packs a::before {
+    transition: opacity var(--dur-base) var(--ease-out);
+  }
+  .tool-card:target::after {
+    opacity: 0;
+    animation: tool-target-ring 1.2s var(--ease-out) both;
+  }
+  @keyframes tool-target-ring {
+    from {
+      opacity: 0.6;
+    }
+    to {
+      opacity: 0;
+    }
+  }
+}

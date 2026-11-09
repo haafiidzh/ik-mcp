@@ -1,22 +1,37 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { REPO_URL } from "@/lib/site";
+import type { ReactNode } from "react";
+import { Bug, CircleDashed, Laptop, ListChecks, Monitor, Route, Terminal, Wrench, type LucideIcon } from "lucide-react";
+import { TabPanelCard } from "@/components/shared/tab-panel-card";
 import { CodeBlock } from "@/components/shared/code-block";
 import { Callout } from "@/components/shared/callout";
 import { PageShell, Section } from "@/components/shared/page-shell";
 import { StatusBadge } from "@/components/shared/status-badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  AnimatedTabs,
+  AnimatedTabsContent,
+  AnimatedTabsList,
+  AnimatedTabsPanels,
+  AnimatedTabsTrigger,
+} from "@/components/motion/animated-tabs";
+import { StepRail } from "@/components/motion/step-rail";
+import "../motion-tabs.css";
+import "../motion-install.css";
 
 export const metadata: Metadata = {
   title: "Install",
   description: "Build ik from source and add it to Claude Code. Verified on Linux and WSL only.",
 };
 
-const CLONE = `git clone <REPOSITORY_URL> ik
+const CLONE = `git clone ${REPO_URL}.git ik
 cd ik
 pnpm install
 pnpm build`;
 
-const ADD = `claude mcp add ik -- node /ABSOLUTE/PATH/TO/ik/packages/server/dist/index.js --config /ABSOLUTE/PATH/TO/ik/packages/server/config/devworkspace.example.json`;
+const SAMPLE_DB = `pnpm sample:db`;
+
+const ADD = `claude mcp add --transport stdio ik -- node /ABSOLUTE/PATH/TO/ik/packages/server/dist/index.js --config /ABSOLUTE/PATH/TO/ik/packages/server/config/devworkspace.example.json`;
 
 const VERIFY = `claude mcp list`;
 
@@ -53,6 +68,55 @@ const ENV_NAMES = `DEVWORKSPACE_CONFIG    # config path, used when --config is n
 GITHUB_TOKEN          # only if you enable the GitHub pack (name set by tokenEnv in config)
 DEVWS_PG_URL          # only if you enable the PostgreSQL connection (connectionStringEnv)`;
 
+const PLATFORMS: {
+  id: string;
+  tab: string;
+  name: string;
+  Icon: LucideIcon;
+  kind: "verified" | "not-verified";
+  badge: string;
+  rows: { Icon: LucideIcon; text: ReactNode }[];
+}[] = [
+  {
+    id: "linux",
+    tab: "WSL / Linux",
+    name: "WSL / Linux",
+    Icon: Terminal,
+    kind: "verified",
+    badge: "Developed and tested on WSL2/Linux with Node 22",
+    rows: [
+      { Icon: ListChecks, text: "Follow the steps below as written." },
+      { Icon: Terminal, text: <>If you use WSL, run every command inside the WSL shell, including <code>claude</code>.</> },
+    ],
+  },
+  {
+    id: "macos",
+    tab: "macOS",
+    name: "macOS",
+    Icon: Laptop,
+    kind: "not-verified",
+    badge: "NOT YET VERIFIED",
+    rows: [
+      { Icon: CircleDashed, text: "The steps below use no Linux-specific tools, so they may work, but nobody has tested them on macOS." },
+      { Icon: Bug, text: "Treat any difference as a bug to report, not as a supported setup." },
+      { Icon: Wrench, text: <>The native module <code>better-sqlite3</code> needs a working build toolchain during <code>pnpm install</code>.</> },
+    ],
+  },
+  {
+    id: "windows",
+    tab: "Windows",
+    name: "Windows",
+    Icon: Monitor,
+    kind: "not-verified",
+    badge: "NOT YET VERIFIED",
+    rows: [
+      { Icon: CircleDashed, text: "Native Windows (PowerShell, cmd) has not been tested." },
+      { Icon: Route, text: "Path separators and quoting in the commands below would differ." },
+      { Icon: Terminal, text: "The verified route on a Windows machine is WSL2: install the project inside WSL and use the Linux steps." },
+    ],
+  },
+];
+
 export default function InstallPage() {
   return (
     <PageShell
@@ -77,67 +141,69 @@ export default function InstallPage() {
       </Section>
 
       <Section id="os" title="Your platform">
-        <Tabs defaultValue="linux">
-          <TabsList aria-label="Operating system" className="h-auto flex-wrap">
-            <TabsTrigger value="linux" className="h-9 px-3">WSL / Linux</TabsTrigger>
-            <TabsTrigger value="macos" className="h-9 px-3">macOS</TabsTrigger>
-            <TabsTrigger value="windows" className="h-9 px-3">Windows</TabsTrigger>
-          </TabsList>
-          <TabsContent value="linux" className="space-y-2">
-            <StatusBadge kind="verified" label="Developed and tested on WSL2/Linux with Node 22" />
-            <p>Follow the steps below as written. If you use WSL, run every command inside the WSL shell, including <code>claude</code>.</p>
-          </TabsContent>
-          <TabsContent value="macos" className="space-y-2">
-            <StatusBadge kind="not-verified" label="NOT YET VERIFIED" />
-            <p>
-              The steps below use no Linux-specific tools, so they may work, but nobody has tested them on macOS.
-              Treat any difference as a bug to report, not as a supported setup. The native module
-              <code> better-sqlite3</code> needs a working build toolchain during <code>pnpm install</code>.
-            </p>
-          </TabsContent>
-          <TabsContent value="windows" className="space-y-2">
-            <StatusBadge kind="not-verified" label="NOT YET VERIFIED" />
-            <p>
-              Native Windows (PowerShell, cmd) has not been tested. Path separators and quoting in the commands below
-              would differ. The verified route on a Windows machine is WSL2: install the project inside WSL and use the
-              Linux steps.
-            </p>
-          </TabsContent>
-        </Tabs>
+        <AnimatedTabs defaultValue="linux" verticalFromMd>
+          <AnimatedTabsList label="Operating system">
+            {PLATFORMS.map((p) => (
+              <AnimatedTabsTrigger key={p.id} value={p.id}>{p.tab}</AnimatedTabsTrigger>
+            ))}
+          </AnimatedTabsList>
+          <AnimatedTabsPanels>
+            {PLATFORMS.map((p) => (
+              <AnimatedTabsContent key={p.id} value={p.id}>
+                <TabPanelCard
+                  Icon={p.Icon}
+                  title={p.name}
+                  badge={<StatusBadge kind={p.kind} label={p.badge} />}
+                  rows={p.rows}
+                />
+              </AnimatedTabsContent>
+            ))}
+          </AnimatedTabsPanels>
+        </AnimatedTabs>
       </Section>
 
-      <Section id="build" title="1. Get the code and build it">
-        <p>
-          Replace <code>&lt;REPOSITORY_URL&gt;</code> with the repository address; it is a placeholder because the
-          project is not published yet.
-        </p>
-        <CodeBlock code={CLONE} label="Clone and build" />
-        <p>This produces <code>packages/server/dist/index.js</code>, the file Claude will start.</p>
-      </Section>
+      <StepRail>
+        <Section id="build" title="1. Get the code and build it">
+          <p>
+            Clone the public repository and build it. The project is not published as a package yet, so you build from source.
+          </p>
+          <CodeBlock code={CLONE} label="Clone and build" />
+          <p>This produces <code>packages/server/dist/index.js</code>, the file Claude will start.</p>
+        </Section>
 
-      <Section id="add" title="2. Add it to Claude Code">
-        <p>
-          The first run can use the example config shipped in the repository. It points at a small sample workspace
-          inside the repository, keeps every pack read-only and has the database, GitHub and API packs disabled. Use
-          absolute paths; <code>/ABSOLUTE/PATH/TO/ik</code> stands for where you cloned the repository.
-        </p>
-        <CodeBlock code={ADD} label="Add the server to Claude Code" />
-        <p>
-          Syntax follows the Claude Code documentation:
-          <code> claude mcp add [options] &lt;name&gt; -- &lt;command&gt; [args...]</code>, where <code>--</code> separates
-          Claude&rsquo;s own options from the server command (
-          <a href="https://code.claude.com/docs/en/mcp">code.claude.com/docs/en/mcp</a>).
-        </p>
-      </Section>
+        <Section id="sample-db" title="2. Optional: create the sample database">
+          <p>
+            The example config also lists a read-only SQLite connection named <code>local-sqlite</code>. Its database file is
+            generated, not committed, so run this once from the repository root to create it. Without it the{" "}
+            <code>db_*</code> tools return <code>INTEGRATION_UNAVAILABLE</code>; the filesystem tools work either way.
+          </p>
+          <CodeBlock code={SAMPLE_DB} label="Create the sample database (optional)" />
+        </Section>
 
-      <Section id="verify" title="3. Verify">
-        <CodeBlock code={VERIFY} label="List MCP servers" />
-        <p>
-          Start <code>claude</code> and ask: &ldquo;Call <code>server_get_status</code> and show me the result.&rdquo; You
-          should see the server name and version, which packs are enabled, <code>allowWrites: false</code> and the
-          limits in force. The exact fields are listed in the <Link href="/tools">tools reference</Link>.
-        </p>
-      </Section>
+        <Section id="add" title="3. Add it to Claude Code">
+          <p>
+            The first run can use the example config shipped in the repository. It points at a small sample workspace
+            inside the repository, keeps every pack read-only and has the database, GitHub and API packs disabled. Use
+            absolute paths; <code>/ABSOLUTE/PATH/TO/ik</code> stands for where you cloned the repository.
+          </p>
+          <CodeBlock code={ADD} label="Add the server to Claude Code" />
+          <p>
+            Syntax follows the Claude Code documentation:
+            <code> claude mcp add [options] &lt;name&gt; -- &lt;command&gt; [args...]</code>, where <code>--transport stdio</code> is an
+            option and goes before the name, and <code>--</code> separates Claude&rsquo;s own options from the server command (
+            <a href="https://code.claude.com/docs/en/mcp">code.claude.com/docs/en/mcp</a>).
+          </p>
+        </Section>
+
+        <Section id="verify" title="4. Verify">
+          <CodeBlock code={VERIFY} label="List MCP servers" />
+          <p>
+            Start <code>claude</code> and ask: &ldquo;Call <code>server_get_status</code> and show me the result.&rdquo; You
+            should see the server name and version, which packs are enabled, <code>allowWrites: false</code> and the
+            limits in force. The exact fields are listed in the <Link href="/tools">tools reference</Link>.
+          </p>
+        </Section>
+      </StepRail>
 
       <Section id="config" title="Use your own folder">
         <p>

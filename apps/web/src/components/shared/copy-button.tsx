@@ -24,7 +24,7 @@ export function CopyButton({ text, what }: { text: string; what: string }) {
 
   return (
     <>
-      <Button type="button" variant="ghost" size="sm" onClick={copy} aria-label={`Copy ${what}`} className="h-7 gap-1.5">
+      <Button type="button" variant="ghost" size="sm" onClick={copy} aria-label={`Copy ${what}`} data-copy-state={state} className="h-7 gap-1.5">
         {state === "copied" ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
         <span>{state === "copied" ? "Copied" : "Copy"}</span>
       </Button>

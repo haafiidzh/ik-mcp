@@ -1,0 +1,153 @@
+/*
+ * /install motion (web-motion-spec 4.2, M-09). transform/opacity only; the base state is the final state.
+ * Step rail: vertical line + number-less dot per step (the visible "1." "2." "3." stay in the headings).
+ * Dot state follows data-active (set by StepRail); aria-current="step" is on the heading link.
+ * Snippet accent bar sweeps once on reveal; copy feedback is a one-shot ring + icon pop keyed off data-copy-state.
+ */
+.step-rail {
+  position: relative;
+}
+.step-rail > section {
+  position: relative;
+}
+.step-rail > section > div figure,
+.step-rail figure {
+  position: relative;
+}
+
+@media (min-width: 640px) {
+  .step-rail {
+    padding-left: 2rem;
+  }
+  .step-rail::before,
+  .step-rail::after {
+    content: "";
+    position: absolute;
+    left: 0.4375rem;
+    top: 0.9rem;
+    bottom: 0.9rem;
+    width: 2px;
+    transform-origin: top;
+  }
+  .step-rail::before {
+    background: var(--border);
+  }
+  .step-rail::after {
+    background: var(--primary);
+    opacity: 0.55;
+  }
+  .step-rail > section::before {
+    content: "";
+    position: absolute;
+    left: -2rem;
+    top: 0.5rem;
+    width: 1rem;
+    height: 1rem;
+    border-radius: 9999px;
+    background: var(--background);
+    border: 2px solid var(--primary);
+  }
+  .step-rail > section[data-active="true"]::before {
+    background: var(--primary);
+  }
+}
+@media (max-width: 639px) {
+  .step-rail::before,
+  .step-rail::after {
+    content: none;
+  }
+}
+
+/* Snippet accent bar: static 2px bar is the final state. */
+.step-rail figure::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 2px;
+  background: var(--primary);
+  transform-origin: top;
+  pointer-events: none;
+}
+
+/* Copy feedback ring on the figure border (any figure whose copy button reports copied). */
+figure:has([data-copy-state="copied"]) {
+  position: relative;
+}
+figure:has([data-copy-state="copied"])::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 2px var(--safe, var(--primary));
+  opacity: 0;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  [data-copy-state="copied"] svg {
+    animation: install-pop var(--dur-base, 200ms) var(--ease-out, ease-out) both;
+  }
+  figure:has([data-copy-state="copied"])::after {
+    animation: install-ring 600ms var(--ease-out, ease-out) both;
+  }
+  @keyframes install-pop {
+    from {
+      transform: scale(0.6);
+      opacity: 0;
+    }
+    to {
+      transform: scale(1);
+      opacity: 1;
+    }
+  }
+  @keyframes install-ring {
+    from {
+      opacity: 0.35;
+    }
+    to {
+      opacity: 0;
+    }
+  }
+
+  @media (min-width: 640px) {
+    .step-rail > section::before {
+      transition:
+        transform var(--dur-base, 200ms) var(--ease-out, ease-out),
+        background-color var(--dur-base, 200ms) var(--ease-out, ease-out);
+    }
+    .step-rail > section[data-active="true"]::before {
+      transform: scale(1.2);
+    }
+  }
+
+  @supports (animation-timeline: view()) {
+    @keyframes install-fill {
+      from {
+        transform: scaleY(0);
+      }
+      to {
+        transform: scaleY(1);
+      }
+    }
+    @keyframes install-sweep {
+      from {
+        transform: scaleY(0);
+      }
+      to {
+        transform: scaleY(1);
+      }
+    }
+    @media (min-width: 640px) {
+      .step-rail::after {
+        animation: install-fill linear both;
+        animation-timeline: view();
+        animation-range: entry 10% cover 80%;
+      }
+    }
+    .step-rail figure::before {
+      animation: install-sweep linear both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 100%;
+    }
+  }
+}
