@@ -1,0 +1,354 @@
+/*
+ * Landing hero (web-motion-spec 4.1 S1, M-05). Base state is always the final state, so server HTML, no-JS and
+ * reduced motion show everything at once. Keyframes are applied only inside (prefers-reduced-motion: no-preference).
+ * Animated properties: opacity, transform (scale, translate), clip-path. No layout properties.
+ */
+
+/* ---- Terminal layout (static) ---- */
+.ht-wrap {
+  position: relative;
+  z-index: 1;
+}
+.ht-window {
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: var(--card);
+  overflow: hidden;
+}
+.ht-cap {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
+}
+.ht-sample {
+  font-weight: 600;
+  color: var(--foreground);
+}
+/* All beats share one grid cell: height = tallest beat, so switching beats never shifts layout. */
+.ht-stage {
+  display: grid;
+}
+.ht-beat {
+  grid-area: 1 / 1;
+  min-width: 0;
+  padding: 0.75rem;
+  visibility: hidden;
+}
+.ht-beat[data-active="true"] {
+  visibility: visible;
+}
+.ht-pre {
+  position: relative;
+  margin: 0;
+  /* No clipping: long lines wrap (below), and the result ring (.ht-result::after, inset -1px) must not be cut on the left. */
+  overflow: visible;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.75rem;
+  line-height: 1.6;
+  /* Wrap long lines inside the card instead of scrolling sideways; indentation is kept. */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--foreground);
+}
+.ht-line {
+  display: block;
+}
+.ht-caret,
+.ht-label {
+  color: var(--primary);
+}
+.ht-label {
+  font-weight: 600;
+}
+.ht-tool,
+.ht-result {
+  margin-top: 0.5rem;
+}
+.ht-result {
+  position: relative;
+  display: block;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  background: var(--muted);
+}
+.ht-result::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border: 1px solid var(--primary);
+  border-radius: 0.5rem;
+  opacity: 0;
+  pointer-events: none;
+}
+.ht-redact {
+  background: repeating-linear-gradient(135deg, color-mix(in oklab, var(--primary) 22%, transparent) 0 4px, transparent 4px 8px);
+  color: inherit;
+  border-radius: 2px;
+  padding: 0 0.15em;
+}
+.ht-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  margin: 0.75rem 0 0;
+  padding: 0.25rem 0.625rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--foreground);
+}
+.ht-badge[data-danger="true"] {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+.ht-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  min-height: 3.5rem;
+  padding: 0.5rem 0.75rem;
+  border-top: 1px solid var(--border);
+}
+/* Chips do nothing without JS; they are reserved space but invisible until hydrated. */
+.ht-controls[data-ready="false"] {
+  visibility: hidden;
+}
+.ht-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.ht-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  min-height: 2.75rem;
+  padding: 0 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  font-size: 0.8125rem;
+  color: var(--foreground);
+  cursor: pointer;
+}
+.ht-chip[aria-pressed="true"] {
+  border-color: var(--primary);
+  background: color-mix(in oklab, var(--primary) 12%, transparent);
+  font-weight: 600;
+}
+.ht-chip:focus-visible {
+  outline: 2px solid var(--ring, var(--primary));
+  outline-offset: 2px;
+}
+.ht-pre:focus-visible {
+  outline: 2px solid var(--ring, var(--primary));
+  outline-offset: 2px;
+}
+@media (min-width: 640px) {
+  .ht-pre {
+    font-size: 0.8125rem;
+  }
+  .ht-chip {
+    min-height: 2.25rem;
+  }
+}
+@media (hover: hover) {
+  .ht-chip:hover {
+    border-color: color-mix(in oklab, var(--primary) 50%, var(--border));
+  }
+}
+
+/* ---- Spotlight (static state: invisible until the pointer moves) ---- */
+.hero-spot-clip {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+.hero-spot {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 480px;
+  height: 480px;
+  border-radius: 50%;
+  opacity: 0;
+  pointer-events: none;
+  background: radial-gradient(circle, color-mix(in oklab, var(--primary) 10%, transparent) 0%, transparent 65%);
+  transition: opacity var(--dur-slow) var(--ease-out);
+}
+:root.dark .hero-spot,
+.dark .hero-spot {
+  background: radial-gradient(circle, color-mix(in oklab, var(--primary) 18%, transparent) 0%, transparent 65%);
+}
+@media (prefers-reduced-motion: reduce) {
+  .hero-spot-clip {
+    display: none;
+  }
+}
+@media (hover: none), (pointer: coarse) {
+  .hero-spot-clip {
+    display: none;
+  }
+}
+
+/* ---- h1 highlight: always readable; the sweep only plays under no-preference ---- */
+.hero-hl {
+  position: relative;
+  display: inline-block;
+  isolation: isolate;
+}
+.hero-hl::before {
+  content: "";
+  position: absolute;
+  inset: 0.08em -0.12em 0.02em;
+  z-index: -1;
+  border-radius: 0.25em;
+  background: color-mix(in oklab, var(--primary) 14%, transparent);
+  transform-origin: left;
+  pointer-events: none;
+}
+.dark .hero-hl::before {
+  background: color-mix(in oklab, var(--primary) 22%, transparent);
+}
+
+/* ---- Motion ---- */
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes hero-rise {
+    from {
+      opacity: 0;
+      transform: translateY(12px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  @keyframes hero-sweep {
+    from {
+      transform: scaleX(0);
+    }
+    to {
+      transform: scaleX(1);
+    }
+  }
+  @keyframes hero-window {
+    from {
+      opacity: 0;
+      scale: 0.98;
+    }
+    to {
+      opacity: 1;
+      scale: 1;
+    }
+  }
+  @keyframes ht-type {
+    from {
+      clip-path: inset(0 100% 0 0);
+    }
+    to {
+      clip-path: inset(0 0 0 0);
+    }
+  }
+  @keyframes ht-fade {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  @keyframes ht-flash {
+    from {
+      opacity: 1;
+    }
+    to {
+      opacity: 0;
+    }
+  }
+  @keyframes ht-pop {
+    from {
+      opacity: 0;
+      transform: scale(0.9);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+  @keyframes ht-pulse {
+    from {
+      opacity: 0.5;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  @keyframes hero-away {
+    from {
+      opacity: 1;
+      translate: 0 0;
+    }
+    to {
+      opacity: 0.6;
+      translate: 0 -24px;
+    }
+  }
+
+  .hero-rise {
+    animation: hero-rise var(--dur-base) var(--ease-out) var(--hd, 0ms) backwards;
+  }
+  .hero-hl::before {
+    animation: hero-sweep var(--dur-slow) var(--ease-inout) 300ms backwards;
+  }
+  .ht-window {
+    animation: hero-window var(--dur-slow) var(--ease-out) 200ms backwards;
+  }
+
+  /* One-shot sequence; the final state is the base state, fill-mode backwards holds the start state during delays. */
+  .ht-beat[data-playing="true"] .ht-prompt {
+    animation: ht-type var(--t-type) steps(var(--t-steps), end) 0ms backwards;
+  }
+  .ht-beat[data-playing="true"] .ht-tool {
+    animation: ht-fade var(--dur-fast) var(--ease-out) var(--t-tool) backwards;
+  }
+  .ht-beat[data-playing="true"] .ht-args {
+    animation: ht-type 300ms var(--ease-linear) var(--t-args) backwards;
+  }
+  .ht-beat[data-playing="true"] .ht-result::after {
+    animation: ht-flash var(--dur-slow) var(--ease-out) var(--t-result) backwards;
+  }
+  .ht-beat[data-playing="true"] .ht-rline {
+    animation: ht-type 120ms var(--ease-linear) calc(var(--t-lines) + var(--i) * 50ms) backwards,
+      ht-fade 120ms var(--ease-linear) calc(var(--t-lines) + var(--i) * 50ms) backwards;
+  }
+  .ht-beat[data-playing="true"] .ht-badge {
+    animation: ht-pop var(--dur-base) var(--ease-out) var(--t-badge) backwards;
+  }
+  .ht-beat[data-playing="true"] .ht-redact {
+    animation: ht-pulse 400ms var(--ease-out) var(--t-badge) backwards;
+  }
+
+  @supports (animation-timeline: view()) {
+    .ht-wrap {
+      animation: hero-away linear both;
+      animation-timeline: view();
+      animation-range: exit 0% exit 100%;
+    }
+  }
+}
+
+@media print {
+  .hero-spot-clip {
+    display: none;
+  }
+  .ht-controls {
+    display: none;
+  }
+}

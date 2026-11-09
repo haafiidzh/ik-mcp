@@ -1,0 +1,23 @@
+/*
+ * Landing card hover (web-motion-spec 4.1 S3, M-04). translate/rotate (individual properties, so they do not fight Reveal's inline transform) and border-color only, pointer devices only.
+ * The base state is the final state; nothing here runs without hover or focus.
+ */
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .pack-card {
+    transition:
+      translate var(--dur-fast) var(--ease-out),
+      border-color var(--dur-fast) var(--ease-out);
+  }
+  .pack-card > :first-child > svg:first-child {
+    transition: rotate var(--dur-fast) var(--ease-out);
+  }
+  .pack-card:hover,
+  .pack-card:focus-within {
+    translate: 0 -2px;
+    border-color: color-mix(in oklab, var(--primary) 40%, var(--border));
+  }
+  .pack-card:hover > :first-child > svg:first-child,
+  .pack-card:focus-within > :first-child > svg:first-child {
+    rotate: -6deg;
+  }
+}

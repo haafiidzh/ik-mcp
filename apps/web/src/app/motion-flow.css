@@ -1,0 +1,95 @@
+/*
+ * S5 flow diagram (web-motion-spec 4.1, M-06). Base state is the final state (server HTML, no JS, reduced motion).
+ * JS sets data-flow="armed" | "play" | "done" and data-step="1..4" on .fd-root. Animated: stroke-dashoffset (svg paint
+ * only, no layout), opacity, transform. Nothing loops.
+ */
+.fd-dot {
+  fill: var(--primary);
+  opacity: 0;
+}
+/* Controls reserve their space but stay invisible until hydrated; hidden without JS. */
+.fd-root:not([data-ready]) .fd-ctl {
+  visibility: hidden;
+}
+.fd-root[data-flow="armed"] .fd-draw,
+.fd-root[data-flow="play"] .fd-draw {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+}
+.fd-root[data-flow="armed"] .fd-fade {
+  opacity: 0;
+}
+.fd-root[data-flow="play"] .fd-fade {
+  opacity: 0;
+}
+
+/* Current step: colour only (no weight/size change, so the list never reflows). */
+.fd-part,
+.fd-li {
+  transition: color var(--dur-fast) var(--ease-standard);
+}
+.fd-li {
+  --fd-hl: var(--primary);
+}
+.fd-li::marker {
+  transition: color var(--dur-fast) var(--ease-standard);
+}
+.fd-root[data-step="1"] .fd-li:nth-child(1),
+.fd-root[data-step="2"] .fd-li:nth-child(2),
+.fd-root[data-step="3"] .fd-li:nth-child(3),
+.fd-root[data-step="4"] .fd-li:nth-child(4),
+.fd-li:hover {
+  color: var(--foreground);
+}
+.fd-root[data-step="1"] .fd-li:nth-child(1)::marker,
+.fd-root[data-step="2"] .fd-li:nth-child(2)::marker,
+.fd-root[data-step="3"] .fd-li:nth-child(3)::marker,
+.fd-root[data-step="4"] .fd-li:nth-child(4)::marker {
+  color: var(--primary);
+}
+.fd-root[data-step="1"] .fd-p1,
+.fd-root[data-step="2"] .fd-p2,
+.fd-root[data-step="3"] .fd-p3,
+.fd-root[data-step="4"] .fd-p4,
+.fd-root:has(.fd-li:nth-child(1):hover) .fd-p1,
+.fd-root:has(.fd-li:nth-child(2):hover) .fd-p2,
+.fd-root:has(.fd-li:nth-child(3):hover) .fd-p3,
+.fd-root:has(.fd-li:nth-child(4):hover) .fd-p4 {
+  color: var(--primary);
+}
+@media (prefers-reduced-motion: reduce) {
+  /* Replay/Pause have nothing to control under reduced motion (the markup is identical to the server's). */
+  .fd-ctl {
+    display: none;
+  }
+  .fd-part,
+  .fd-li,
+  .fd-li::marker {
+    transition: none;
+  }
+}
+
+/* Large screens: the controls sit under the diagram (left column), not under the taller step list. */
+@media (min-width: 1024px) {
+  .fd-root {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 2rem;
+    align-items: start;
+  }
+  .fd-root > .fd-grid {
+    display: contents;
+  }
+  .fd-root .fd-svg {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .fd-root .fd-list {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+  }
+  .fd-root > .fd-ctl {
+    grid-column: 1;
+    grid-row: 2;
+  }
+}
