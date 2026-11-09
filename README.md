@@ -45,7 +45,7 @@ macOS (see [Known limits](#known-limits)).
 The install steps are the same on every OS; run them in a terminal (on Windows prefer PowerShell or WSL):
 
 ```bash
-git clone <REPOSITORY-URL-PLACEHOLDER> devworkspace-mcp   # clone URL not decided yet; or copy the project folder
+git clone https://github.com/haafiidzh/ik-mcp devworkspace-mcp   # or copy the project folder
 cd devworkspace-mcp   # the repository root is the pnpm workspace root
 pnpm install
 pnpm build
@@ -88,7 +88,7 @@ cp packages/server/config/devworkspace.example.json packages/server/config/devwo
 Claude Code CLI syntax (see <https://code.claude.com/docs/en/mcp>; `claude mcp add --help` agrees):
 
 ```bash
-claude mcp add --transport stdio devworkspace -- \
+claude mcp add --transport stdio ik -- \
   node /abs/path/to/project/packages/server/dist/index.js \
   --config /abs/path/to/project/packages/server/config/devworkspace.json
 ```
@@ -97,7 +97,7 @@ With secrets, pass them with `--env` (names and values are stored by Claude Code
 repo), placed before the server name:
 
 ```bash
-claude mcp add --transport stdio --env GITHUB_TOKEN=<your-token> devworkspace -- node /abs/.../dist/index.js --config /abs/.../devworkspace.json
+claude mcp add --transport stdio --env GITHUB_TOKEN=<your-token> ik -- node /abs/.../dist/index.js --config /abs/.../devworkspace.json
 ```
 
 Or use a project `.mcp.json` that refers to a variable by name (Claude Code expands `${VAR}` from your shell
@@ -106,7 +106,7 @@ environment, so the secret is not written to the file):
 ```json
 {
   "mcpServers": {
-    "devworkspace": {
+    "ik": {
       "command": "node",
       "args": [
         "/abs/path/to/project/packages/server/dist/index.js",
@@ -120,7 +120,7 @@ environment, so the secret is not written to the file):
 ```
 
 Verify: `claude mcp list` (health check), then inside a session run `/mcp`, and ask Claude to call
-`server_get_status`. Remove with `claude mcp remove devworkspace`. Rebuild (`pnpm build`) after pulling changes and
+`server_get_status`. Remove with `claude mcp remove ik`. Rebuild (`pnpm build`) after pulling changes and
 restart the session.
 
 ### Claude Desktop - untested / optional
@@ -134,7 +134,7 @@ Windows `%APPDATA%\Claude\claude_desktop_config.json`, Linux `~/.config/Claude/c
 ```json
 {
   "mcpServers": {
-    "devworkspace": {
+    "ik": {
       "command": "node",
       "args": ["/abs/path/to/project/packages/server/dist/index.js", "--config", "/abs/path/to/devworkspace.json"],
       "env": { "GITHUB_TOKEN": "<set only if you enable GitHub>" }
@@ -330,7 +330,7 @@ Workflows:
 - "Give me an overview of workspace `sample-project`."
 - "Find files related to issue 12 in `example-org/example-repo` and draft a change plan. Do not modify anything."
 
-You can also use the built-in prompts from the host's prompt menu (for example `review_project_health`).
+You can also use the built-in prompts. In Claude Code they appear in the `/` menu as `/ik:review_project_health (MCP)`, and `/mcp__ik__review_project_health` runs the same prompt (arguments go after a space, for example `/mcp__ik__understand_database_schema local-sqlite`). Resources are referenced with `@`, for example `@ik:database://local-sqlite/schema` (needs `pnpm sample:db`). Source: <https://code.claude.com/docs/en/mcp>. This assumes the server was added under the name `ik`.
 
 ## Demo scenarios A-C
 
@@ -396,7 +396,7 @@ The GitHub integration is tested against a local mock only; it has not been run 
 | Host shows the server as failed / no tools | Run the exact command by hand and read stderr. Check that the path to `dist/index.js` is absolute and that `pnpm build` was run. |
 | Garbled protocol / "invalid JSON" in host logs | Something wrote to stdout. The server never does; check for a wrapper script that prints (for example a shell profile echo) or a `node --require` hook. |
 | `Cannot find module 'better-sqlite3'` or a native binding error | The native build is missing. Re-run `pnpm install` (a failed rebuild needs a C++ toolchain, see Requirements) and make sure the Node version used by the host is the one you built with. |
-| `PERMISSION_DENIED` on a file | It is outside the workspace, blocked (`.env`, keys, `*secret*`, `.git/`), hidden by `ignoreDirs` or `allowedExtensions`, or a link to an outside file. Relative paths only. |
+| `INVALID_INPUT` or `PERMISSION_DENIED` on a file | `INVALID_INPUT`: the path is absolute, starts with `~`, contains `..`, a backslash, `:` or encoded separators (`%2e`, `%2f`, `%5c`, `%00`), or is a symlink loop. Use paths relative to the workspace root. `PERMISSION_DENIED`: the file is blocked (`.env`, keys, `*secret*`, `.git/`), or it is a symlink or hard link that leads outside the root. Reading a file whose extension is not in `allowedExtensions` is also `PERMISSION_DENIED`. A missing path, or a path inside an `ignoreDirs` directory, is `NOT_FOUND`. |
 | Tool `NOT_FOUND` for a workspace/connection/profile | The name must exist in the config exactly; list them with `workspace://list`, `db_list_connections`, `api_list_profiles`. |
 | All `github_*` tools say `PERMISSION_DENIED` | Both `allowedRepositories` and `allowedOwners` are empty, or the repository is not listed (case-insensitive match). |
 | GitHub `INTEGRATION_UNAVAILABLE` or `RATE_LIMITED` | Token rejected (401) or rate limit reached; set a valid token through the host `env` block and retry after `retryAfterSeconds`. Without a token only public repositories can be read. |
